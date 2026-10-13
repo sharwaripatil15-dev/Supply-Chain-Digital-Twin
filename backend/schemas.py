@@ -272,3 +272,38 @@ class UploadResponse(BaseModel):
     summary: UploadSummary
     warnings: list[str]
     activated: bool = Field(description="true if the uploaded network replaced the live graph for core/ routers")
+
+
+# ---------------------------------------------------------------- risk / scenario prediction
+class RiskPredictRequest(BaseModel):
+    events: list[Event] = Field(min_length=1)
+    horizon: int = Field(default=30, ge=1, le=365, description="Simulation horizon (days) used as denominator for the unmet fraction")
+
+
+class RiskShapFactor(BaseModel):
+    feature: str = Field(description="Scenario feature name")
+    impact: float = Field(description="SHAP value: positive pushes the predicted fraction up, negative down")
+
+
+class RiskModelMetrics(BaseModel):
+    mae: float = Field(description="Mean absolute error on held-out test scenarios")
+    r2: float = Field(description="R² on held-out test scenarios (0 = baseline, 1 = perfect)")
+    n_train: int
+    n_test: int
+
+
+class RiskPredictResponse(BaseModel):
+    unmet_demand_fraction: float = Field(ge=0, le=1, description="Predicted share of total demand unmet over the horizon (0 = no disruption, 1 = total failure)")
+    predicted_unmet_units: float = Field(default=0.0, description="Estimated unmet demand in physical units over 30 days")
+    risk_score: int = Field(default=0, ge=0, le=100, description="Calibrated scenario risk score from 0 (negligible) to 100 (critical)")
+    risk_level: Literal["low", "moderate", "high", "critical"] = Field(default="low", description="Risk tier: low | moderate | high | critical")
+    confidence: Literal["model", "no_model"] = Field(description="'model' = XGBoost prediction; 'no_model' = model not trained")
+    top_factors: list[RiskShapFactor] = Field(description="Top SHAP contributors (feature-level, not causal)")
+    model_metrics: RiskModelMetrics | None = Field(default=None, description="Evaluation metrics from training; null if no model")
+    note: str | None = Field(default=None, description="Informational note, e.g. about model status")
+
+
+class RiskModelStatusResponse(BaseModel):
+    trained: bool
+    path: str
+    metrics: RiskModelMetrics | None = None

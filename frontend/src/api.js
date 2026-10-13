@@ -15,6 +15,8 @@ export const api = {
   parse: (text) => data(client.post('/parse', { text })),
   forecast: (horizon = 14) => data(client.get('/forecast', { params: { horizon } })),
   surrogate: () => data(client.get('/surrogate')),
+  riskStatus: () => data(client.get('/risk/status')),
+  predictRisk: (events, horizon = 30) => data(client.post('/risk/predict', { events, horizon })),
   upload: (nodesFile, edgesFile, activate = false) => {
     const form = new FormData()
     form.append('nodes', nodesFile)

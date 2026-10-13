@@ -13,7 +13,7 @@ const CHUNKS = [
 
 export default defineConfig({
   plugins: [react()],
-  server: { host: true, port: 5173, strictPort: true },
+  server: { host: true, port: 5173, strictPort: false },
   preview: { host: true, port: 5173 },
   build: {
     // maplibre (~1.1 MB) and deckgl (~0.9 MB) are lazy chunks used only by the 3D view.
