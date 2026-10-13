@@ -16,6 +16,14 @@ export const api = {
   parse: (text) => data(client.post('/parse', { text })),
   forecast: (horizon = 14) => data(client.get('/forecast', { params: { horizon } })),
   surrogate: () => data(client.get('/surrogate')),
+  riskStatus: () => data(client.get('/risk/status')),
+  predictRisk: (events, horizon = 30) => data(client.post('/risk/predict', { events, horizon })),
+  advisory: () => data(client.get('/ai-advisory')),
+  alternates: (events = [], down_suppliers = [], down_lanes = []) =>
+    data(client.post('/recommend/alternates', { events, down_suppliers, down_lanes })),
+  optimizePlan: (events = [], levers = ['reroute', 'backup', 'overtime', 'safety_stock', 'production_shift'], horizon = 30) =>
+    data(client.post('/optimize/plan', { events, levers, horizon })),
+  dashboardSummary: (events = []) => data(client.post('/dashboard/summary', events)),
   upload: (nodesFile, edgesFile, activate = false) => {
     const form = new FormData()
     form.append('nodes', nodesFile)

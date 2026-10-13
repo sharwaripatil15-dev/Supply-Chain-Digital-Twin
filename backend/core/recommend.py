@@ -62,6 +62,8 @@ def rank_alternate_suppliers(G: nx.DiGraph, down_suppliers: Iterable[str], top: 
             x["_score"] = 0.4 * r_cost[id(x)] + 0.3 * r_lead[id(x)] + 0.3 * r_spare[id(x)]
         for x in sorted(cands, key=lambda x: x["_score"])[:top]:
             premium = x["cost_premium_pct"]
+            x["score"] = round(x["_score"], 3)
+            x["is_backup"] = bool(x["_backup"])
             x["reason"] = (
                 f"Ships to {', '.join(x['_shared'])} like {s}; {x['spare_capacity']:,} units/day spare; "
                 f"{x['lead']:.0f}-day lead; lanes {'+' if premium >= 0 else ''}{premium:.0f}% vs {s}"
@@ -139,6 +141,8 @@ def rank_alternate_routes(
             "spare_capacity": round(max(0.0, spare)),
             "extra_lead_days": round(_path_lead(G, new) - _path_lead(G, old), 1),
             "extra_cost_per_unit": round(_path_cost(G, new) - _path_cost(G, old), 1),
+            "waypoints": [{"id": n, "name": G.nodes[n].get("name", n), "city": G.nodes[n].get("city", ""), "kind": G.nodes[n].get("kind", "")} for n in new],
+            "old_waypoints": [{"id": n, "name": G.nodes[n].get("name", n), "city": G.nodes[n].get("city", ""), "kind": G.nodes[n].get("kind", "")} for n in old],
         })
     return sorted(routes, key=lambda r: (r["extra_lead_days"], r["extra_cost_per_unit"]))[:k]
 

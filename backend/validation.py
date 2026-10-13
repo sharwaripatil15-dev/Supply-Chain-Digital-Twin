@@ -20,9 +20,17 @@ def validate_events(events: Iterable[Event], nodes: dict[str, str], edges: set[t
     events = list(events)
     errors: list[str] = []
     for i, ev in enumerate(events):
-        if not 0.0 <= ev.severity <= 1.0:
-            errors.append(f"events[{i}]: severity {ev.severity} outside 0..1")
-        if ev.type == "edge":
+        is_edge = ev.type in ("edge", "route_block")
+        is_dem = ev.type in ("demand", "demand_surge")
+        
+        if is_dem:
+            if not 0.0 <= ev.severity <= 3.0:
+                errors.append(f"events[{i}]: demand severity {ev.severity} outside 0..3")
+        else:
+            if not 0.0 <= ev.severity <= 1.0:
+                errors.append(f"events[{i}]: severity {ev.severity} outside 0..1")
+
+        if is_edge:
             parts = ev.target.split("->")
             if len(parts) != 2:
                 errors.append(f'events[{i}]: edge target must look like "SRC->DST", got {ev.target!r}')
@@ -30,7 +38,7 @@ def validate_events(events: Iterable[Event], nodes: dict[str, str], edges: set[t
                 errors.append(f"events[{i}]: unknown edge {ev.target!r}")
         elif ev.target not in nodes:
             errors.append(f"events[{i}]: unknown node id {ev.target!r}")
-        elif ev.type == "demand" and not is_demand(nodes[ev.target]):
+        elif is_dem and not is_demand(nodes[ev.target]):
             errors.append(f"events[{i}]: demand events must target a customer or retailer, {ev.target!r} is a {nodes[ev.target]}")
     if errors:
         raise EventValidationError("; ".join(errors))

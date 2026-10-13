@@ -289,3 +289,107 @@ def _production_actions(G: nx.DiGraph, days: list[int], sh: dict, nf) -> list[di
             "reason": f"{a} {G.nodes[a].get('name', a)} {why}; {b} {G.nodes[b].get('name', b)} has spare capacity and unaffected inbound supply.",
         })
     return actions
+
+
+def compute_optimization_insights(G: nx.DiGraph, plan: dict, events: list[Event], horizon: int = 30) -> dict:
+    """Generate day-by-day inventory trajectories, plant allocation matrix, and ROI savings for the optimized plan."""
+    unit_price = G.graph.get("unit_price", 4200.0)
+    do_nothing = optimize_plan(G, events, levers=[], horizon=horizon)
+    inaction_unmet = do_nothing["unmet"]
+    inaction_loss = round(inaction_unmet * unit_price, 0)
+    fix_cost = plan.get("cost", 0.0)
+    residual_loss = round(plan.get("unmet", 0.0) * unit_price, 0)
+    net_savings = max(0.0, inaction_loss - (fix_cost + residual_loss))
+    units_saved = max(0.0, inaction_unmet - plan.get("unmet", 0.0))
+    roi_multiple = round(net_savings / fix_cost, 2) if fix_cost > 0 else 0.0
+
+    base_wh_stock = sum((d.get("stock") or 0.0) for _, d in G.nodes(data=True) if d.get("kind") == "warehouse")
+    base_fac_stock = sum((d.get("stock") or 0.0) for _, d in G.nodes(data=True) if d.get("kind") == "factory")
+    total_prepo = sum(a.get("units", 0.0) for a in plan.get("inventory_actions", []))
+
+    window = plan.get("window") or [0, 0]
+    w_start, w_end = window[0], window[1]
+
+    daily_unmet_map = {}
+    daily_draw_map = {}
+    for item in plan.get("daily_flows", []):
+        t = item.get("day", 0)
+        daily_unmet_map[t] = item.get("unmet", 0.0)
+        daily_draw_map[t] = item.get("stock_drawn", 0.0)
+
+    curr_wh_stock = base_wh_stock
+    curr_fac_stock = max(0.0, base_fac_stock - total_prepo)
+    curr_buffer = 0.0
+    trajectory = []
+
+    for t in range(horizon):
+        if t == max(0, w_start - 1) and total_prepo > 0:
+            curr_buffer = total_prepo
+            curr_wh_stock += total_prepo
+
+        drawn = daily_draw_map.get(t, 0.0)
+        unmet = daily_unmet_map.get(t, 0.0)
+
+        if curr_buffer > 0 and t >= w_start:
+            used = min(curr_buffer, drawn)
+            curr_buffer = max(0.0, curr_buffer - used)
+
+        curr_wh_stock = max(0.0, curr_wh_stock - drawn * 0.5)
+
+        trajectory.append({
+            "day": t,
+            "warehouse_stock": round(curr_wh_stock, 1),
+            "factory_stock": round(curr_fac_stock, 1),
+            "safety_buffer": round(curr_buffer, 1),
+            "stock_drawn": round(drawn, 1),
+            "unmet_demand": round(unmet, 1),
+        })
+
+    factories = [n for n, d in G.nodes(data=True) if d.get("kind") == "factory"]
+    spike = spike_baseline(G, events, horizon)
+    peak_states = {
+        n: min((_active_state(events, t, spike)[0].get(n, 1.0) for t in range(w_start, w_end + 1)), default=1.0)
+        if events else 1.0
+        for n in factories
+    }
+
+    allocations = []
+    for f in factories:
+        d = G.nodes[f]
+        cap = float(d.get("capacity") or 0.0)
+        nf = peak_states.get(f, 1.0)
+        disrupted_cap = round(cap * nf, 1)
+
+        sh_out = sum(a.get("units_per_day", 0.0) for a in plan.get("production_actions", []) if a.get("from_factory") == f)
+        sh_in = sum(a.get("units_per_day", 0.0) for a in plan.get("production_actions", []) if a.get("to_factory") == f)
+        ot_units = round(max(0.0, plan.get("capacity_delta", {}).get(f, 0.0) - (sh_in - sh_out)), 1)
+
+        net_output = round(max(0.0, disrupted_cap + ot_units + sh_in - sh_out), 1)
+        util_pct = round(min(130.0, (net_output / cap * 100.0) if cap else 0.0), 1)
+
+        allocations.append({
+            "factory_id": f,
+            "name": d.get("name") or f,
+            "city": d.get("city") or "",
+            "baseline_capacity": round(cap, 1),
+            "disrupted_capacity": disrupted_cap,
+            "overtime_units": ot_units,
+            "shifted_out": round(sh_out, 1),
+            "shifted_in": round(sh_in, 1),
+            "net_output": net_output,
+            "utilization_pct": util_pct,
+        })
+
+    return {
+        "financial_summary": {
+            "fix_cost": fix_cost,
+            "inaction_loss": inaction_loss,
+            "net_savings": net_savings,
+            "units_saved": round(units_saved, 1),
+            "roi_multiple": roi_multiple,
+            "unmet_reduction_pct": round(100.0 * units_saved / max(1.0, inaction_unmet), 1) if inaction_unmet else 100.0,
+        },
+        "daily_inventory_trajectory": trajectory,
+        "plant_allocations": allocations,
+    }
+

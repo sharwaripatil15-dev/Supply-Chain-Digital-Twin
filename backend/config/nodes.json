@@ -1,0 +1,178 @@
+[
+  {
+    "id": "S1",
+    "kind": "supplier",
+    "name": "Pune Steel Coils",
+    "city": "Pune",
+    "tier": "tier_1_supplier",
+    "lat": 18.52,
+    "lon": 73.86,
+    "aliases": ["pune", "pune steel", "pune supplier", "s1", "steel coils", "pune coils"],
+    "backup": false
+  },
+  {
+    "id": "S2",
+    "kind": "supplier",
+    "name": "Chennai Electronics",
+    "city": "Chennai",
+    "tier": "tier_1_supplier",
+    "lat": 13.08,
+    "lon": 80.27,
+    "aliases": ["chennai electronics", "chennai supplier", "chip supplier", "s2", "chennai chips", "semiconductor"],
+    "backup": false
+  },
+  {
+    "id": "S3",
+    "kind": "supplier",
+    "name": "Gujarat Polymers",
+    "city": "Ahmedabad",
+    "tier": "tier_1_supplier",
+    "lat": 23.02,
+    "lon": 72.57,
+    "aliases": ["gujarat", "ahmedabad", "gujarat polymers", "s3", "polymers supplier", "gujarat supplier"],
+    "backup": false
+  },
+  {
+    "id": "S4",
+    "kind": "supplier",
+    "name": "Kolkata Backup Components",
+    "city": "Kolkata",
+    "tier": "backup_supplier",
+    "lat": 22.57,
+    "lon": 88.36,
+    "aliases": ["kolkata", "kolkata backup", "s4", "backup supplier", "calcutta"],
+    "backup": true
+  },
+  {
+    "id": "S5",
+    "kind": "supplier",
+    "name": "Jamshedpur Castings",
+    "city": "Jamshedpur",
+    "tier": "tier_1_supplier",
+    "lat": 22.80,
+    "lon": 86.18,
+    "aliases": ["jamshedpur", "jamshedpur castings", "s5", "tata castings", "jamshedpur supplier"],
+    "backup": false
+  },
+  {
+    "id": "F1",
+    "kind": "factory",
+    "name": "Bengaluru Assembly",
+    "city": "Bengaluru",
+    "tier": "manufacturing",
+    "lat": 12.97,
+    "lon": 77.59,
+    "aliases": ["bengaluru assembly", "bengaluru plant", "bengaluru factory", "f1", "bangalore plant", "bangalore assembly"],
+    "backup": false
+  },
+  {
+    "id": "F2",
+    "kind": "factory",
+    "name": "Hyderabad Plant",
+    "city": "Hyderabad",
+    "tier": "manufacturing",
+    "lat": 17.39,
+    "lon": 78.49,
+    "aliases": ["hyderabad plant", "hyderabad factory", "f2", "telangana plant"],
+    "backup": false
+  },
+  {
+    "id": "F3",
+    "kind": "factory",
+    "name": "Nashik Works",
+    "city": "Nashik",
+    "tier": "manufacturing",
+    "lat": 19.99,
+    "lon": 73.79,
+    "aliases": ["nashik", "nashik works", "nashik plant", "f3"],
+    "backup": false
+  },
+  {
+    "id": "W1",
+    "kind": "warehouse",
+    "name": "Bhiwandi DC",
+    "city": "Mumbai",
+    "tier": "distribution",
+    "lat": 19.30,
+    "lon": 73.06,
+    "aliases": ["bhiwandi", "bhiwandi dc", "bhiwandi warehouse", "w1", "mumbai warehouse", "mumbai dc", "thane warehouse"],
+    "backup": false
+  },
+  {
+    "id": "W2",
+    "kind": "warehouse",
+    "name": "Gurugram DC",
+    "city": "Delhi",
+    "tier": "distribution",
+    "lat": 28.46,
+    "lon": 77.03,
+    "aliases": ["gurugram", "gurgaon", "gurugram dc", "w2", "delhi warehouse", "delhi dc", "ncr warehouse"],
+    "backup": false
+  },
+  {
+    "id": "W3",
+    "kind": "warehouse",
+    "name": "Sriperumbudur DC",
+    "city": "Chennai",
+    "tier": "distribution",
+    "lat": 12.97,
+    "lon": 79.95,
+    "aliases": ["sriperumbudur", "sriperumbudur dc", "sriperumbudur warehouse", "w3", "chennai warehouse", "chennai dc", "south hub"],
+    "backup": false
+  },
+  {
+    "id": "W4",
+    "kind": "warehouse",
+    "name": "Nagpur Hub",
+    "city": "Nagpur",
+    "tier": "distribution",
+    "lat": 21.15,
+    "lon": 79.09,
+    "aliases": ["nagpur", "nagpur hub", "nagpur dc", "w4", "central hub"],
+    "backup": false
+  },
+  {
+    "id": "C1",
+    "kind": "customer",
+    "name": "Mumbai Retail",
+    "city": "Mumbai",
+    "tier": "retail",
+    "lat": 19.08,
+    "lon": 72.88,
+    "aliases": ["mumbai retail", "mumbai demand", "mumbai consumer", "mumbai customer", "c1", "bombay retail", "mumbai e-commerce"],
+    "backup": false
+  },
+  {
+    "id": "C2",
+    "kind": "customer",
+    "name": "Delhi Retail",
+    "city": "Delhi",
+    "tier": "retail",
+    "lat": 28.70,
+    "lon": 77.10,
+    "aliases": ["delhi retail", "delhi demand", "delhi consumer", "delhi customer", "c2", "ncr retail"],
+    "backup": false
+  },
+  {
+    "id": "C3",
+    "kind": "customer",
+    "name": "Bengaluru Retail",
+    "city": "Bengaluru",
+    "tier": "retail",
+    "lat": 12.93,
+    "lon": 77.62,
+    "aliases": ["bengaluru retail", "bengaluru demand", "bengaluru consumer", "bengaluru customer", "c3", "bangalore retail"],
+    "backup": false
+  },
+  {
+    "id": "C4",
+    "kind": "customer",
+    "name": "Hyderabad Retail",
+    "city": "Hyderabad",
+    "tier": "retail",
+    "lat": 17.44,
+    "lon": 78.38,
+    "aliases": ["hyderabad retail", "hyderabad demand", "hyderabad consumer", "hyderabad customer", "c4", "cyberabad retail"],
+    "backup": false
+  }
+]

@@ -34,7 +34,18 @@ export const BOTTLENECK = { threshold: 0.9 }
 
 /** Human label for an event, e.g. "S2 outage", "F1->W3 blocked", "C3 demand +50%". */
 export function eventLabel(e) {
-  if (e.type === 'node') return `${e.target} ${e.severity >= 1 ? 'outage' : `−${Math.round(e.severity * 100)}%`}`
-  if (e.type === 'edge') return `${e.target.replace('->', ' → ')} ${e.severity >= 1 ? 'blocked' : `−${Math.round(e.severity * 100)}%`}`
-  return `${e.target} demand +${Math.round(e.severity * 100)}%`
+  if (!e) return 'Unknown'
+  const target = String(e.target || '')
+  if (e.type === 'node' || e.type === 'capacity_drop') {
+    return `${target} ${(e.severity ?? 0) >= 1 ? 'outage' : `−${Math.round((e.severity ?? 0) * 100)}% cap`}`
+  }
+  if (e.type === 'node_freeze') {
+    return `${target} 100% frozen`
+  }
+  if (e.type === 'edge' || e.type === 'route_block') {
+    return `${target.replace('->', ' → ')} ${(e.severity ?? 0) >= 1 ? 'blocked' : `−${Math.round((e.severity ?? 0) * 100)}%`}`
+  }
+  const sev = e.severity ?? 0
+  const pct = sev >= 1.0 ? Math.round((sev - 1.0) * 100) : Math.round(sev * 100)
+  return `${target} demand +${pct}%`
 }
