@@ -1,0 +1,17 @@
+id,name,kind,city,lat,lon,capacity,stock,demand,reliability,utilization,risk,backup
+S1,Pune Steel Coils,supplier,Pune,18.52,73.86,900,2200,0,0.891,0.72,0.31,False
+S2,Chennai Electronics,supplier,Chennai,13.08,80.27,800,1200,0,0.748,0.84,0.72,False
+S3,Gujarat Polymers,supplier,Ahmedabad,23.02,72.57,700,1500,0,0.867,0.66,0.38,False
+S4,Kolkata Backup Components,supplier,Kolkata,22.57,88.36,400,900,0,0.905,0.35,0.27,True
+F1,Bengaluru Assembly,factory,Bengaluru,12.97,77.59,1000,1400,0,0.846,0.88,0.44,False
+F2,Hyderabad Plant,factory,Hyderabad,17.39,78.49,800,1100,0,0.878,0.79,0.35,False
+F3,Nashik Works,factory,Nashik,19.99,73.79,600,800,0,0.898,0.71,0.29,False
+W1,Bhiwandi DC,warehouse,Mumbai,19.3,73.06,900,1800,0,0.885,0.74,0.33,False
+W2,Gurugram DC,warehouse,Delhi,28.46,77.03,800,1600,0,0.909,0.62,0.26,False
+W3,Sriperumbudur DC,warehouse,Chennai,12.97,79.95,600,700,0,0.797,0.86,0.58,False
+W4,Nagpur Hub,warehouse,Nagpur,21.15,79.09,700,1300,0,0.857,0.81,0.41,False
+C1,Mumbai Retail,customer,Mumbai,19.08,72.88,0,600,300,0.923,0.0,0.22,False
+C2,Delhi Retail,customer,Delhi,28.7,77.1,0,560,280,0.912,0.0,0.25,False
+C3,Bengaluru Retail,customer,Bengaluru,12.93,77.62,0,440,220,0.786,0.0,0.61,False
+C4,Hyderabad Retail,customer,Hyderabad,17.44,78.38,0,360,180,0.864,0.0,0.39,False
+C5,Jaipur Retail,customer,Jaipur,26.91,75.79,0,300,150,0.916,0.0,0.24,False

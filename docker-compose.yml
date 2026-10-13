@@ -1,0 +1,78 @@
+# AEGIS: docker compose up --build
+#   backend  -> http://localhost:8000  (Swagger UI at /docs)
+#   frontend -> http://localhost:5173
+#   redis    -> localhost:6379 (optional cache; the API falls back to in-memory if it is down)
+# Values like ${ANTHROPIC_API_KEY} are read from a .env file next to this one (copy .env.example).
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      USE_MOCK_NETWORK: ${USE_MOCK_NETWORK:-true}
+      USE_MOCK_SIMULATE: ${USE_MOCK_SIMULATE:-true}
+      USE_MOCK_CHAOS: ${USE_MOCK_CHAOS:-true}
+      USE_MOCK_RECOVER: ${USE_MOCK_RECOVER:-true}
+      USE_MOCK_PARSE: ${USE_MOCK_PARSE:-true}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      # DATABASE_URL: postgresql://aegis:aegis@postgres:5432/aegis
+      # NEO4J_URI: bolt://neo4j:7687
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Called from the browser, so it must be the host-visible address, not http://backend:8000.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # OPTIONAL. Not used by the current code. Uncomment if you add persistence:
+  #   postgres: scenario/run history;  neo4j: graph queries on very large networks.
+  # ---------------------------------------------------------------------------
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: aegis
+  #     POSTGRES_PASSWORD: aegis
+  #     POSTGRES_DB: aegis
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #
+  # neo4j:
+  #   image: neo4j:5
+  #   environment:
+  #     NEO4J_AUTH: neo4j/aegis-password
+  #   ports:
+  #     - "7474:7474"
+  #     - "7687:7687"
+  #   volumes:
+  #     - neo4jdata:/data
+
+# volumes:
+#   pgdata:
+#   neo4jdata:

@@ -1,0 +1,628 @@
+{
+ "nodes": [
+  {
+   "id": "S1",
+   "name": "Pune Steel Coils",
+   "kind": "supplier",
+   "city": "Pune",
+   "lat": 18.52,
+   "lon": 73.86,
+   "capacity": 900,
+   "stock": 2200,
+   "demand": 0,
+   "risk": 0.31,
+   "top_factors": [
+    {
+     "feature": "monsoon_flood_index",
+     "impact": 0.09
+    },
+    {
+     "feature": "supplier_financial_health",
+     "impact": -0.06
+    },
+    {
+     "feature": "single_port_dependency",
+     "impact": 0.04
+    }
+   ],
+   "reliability": 0.891,
+   "utilization": 0.72
+  },
+  {
+   "id": "S2",
+   "name": "Chennai Electronics",
+   "kind": "supplier",
+   "city": "Chennai",
+   "lat": 13.08,
+   "lon": 80.27,
+   "capacity": 800,
+   "stock": 1200,
+   "demand": 0,
+   "risk": 0.72,
+   "top_factors": [
+    {
+     "feature": "cyclone_exposure",
+     "impact": 0.21
+    },
+    {
+     "feature": "single_port_dependency",
+     "impact": 0.14
+    },
+    {
+     "feature": "late_delivery_rate_90d",
+     "impact": 0.11
+    },
+    {
+     "feature": "supplier_financial_health",
+     "impact": -0.04
+    }
+   ],
+   "reliability": 0.748,
+   "utilization": 0.84
+  },
+  {
+   "id": "S3",
+   "name": "Gujarat Polymers",
+   "kind": "supplier",
+   "city": "Ahmedabad",
+   "lat": 23.02,
+   "lon": 72.57,
+   "capacity": 700,
+   "stock": 1500,
+   "demand": 0,
+   "risk": 0.38,
+   "top_factors": [
+    {
+     "feature": "heatwave_days",
+     "impact": 0.08
+    },
+    {
+     "feature": "crude_price_volatility",
+     "impact": 0.07
+    },
+    {
+     "feature": "late_delivery_rate_90d",
+     "impact": -0.03
+    }
+   ],
+   "reliability": 0.867,
+   "utilization": 0.66
+  },
+  {
+   "id": "S4",
+   "name": "Kolkata Backup Components",
+   "kind": "supplier",
+   "city": "Kolkata",
+   "lat": 22.57,
+   "lon": 88.36,
+   "capacity": 400,
+   "stock": 900,
+   "demand": 0,
+   "risk": 0.27,
+   "backup": true,
+   "top_factors": [
+    {
+     "feature": "monsoon_flood_index",
+     "impact": 0.07
+    },
+    {
+     "feature": "idle_capacity_ratio",
+     "impact": -0.08
+    },
+    {
+     "feature": "distance_to_factory_km",
+     "impact": 0.05
+    }
+   ],
+   "reliability": 0.905,
+   "utilization": 0.35
+  },
+  {
+   "id": "F1",
+   "name": "Bengaluru Assembly",
+   "kind": "factory",
+   "city": "Bengaluru",
+   "lat": 12.97,
+   "lon": 77.59,
+   "capacity": 1000,
+   "stock": 1400,
+   "demand": 0,
+   "risk": 0.44,
+   "top_factors": [
+    {
+     "feature": "inbound_supplier_concentration",
+     "impact": 0.16
+    },
+    {
+     "feature": "utilisation_pct",
+     "impact": 0.09
+    },
+    {
+     "feature": "maintenance_backlog",
+     "impact": -0.02
+    }
+   ],
+   "reliability": 0.846,
+   "utilization": 0.88
+  },
+  {
+   "id": "F2",
+   "name": "Hyderabad Plant",
+   "kind": "factory",
+   "city": "Hyderabad",
+   "lat": 17.39,
+   "lon": 78.49,
+   "capacity": 800,
+   "stock": 1100,
+   "demand": 0,
+   "risk": 0.35,
+   "top_factors": [
+    {
+     "feature": "inbound_supplier_concentration",
+     "impact": 0.08
+    },
+    {
+     "feature": "heatwave_days",
+     "impact": 0.06
+    },
+    {
+     "feature": "utilisation_pct",
+     "impact": -0.03
+    }
+   ],
+   "reliability": 0.878,
+   "utilization": 0.79
+  },
+  {
+   "id": "F3",
+   "name": "Nashik Works",
+   "kind": "factory",
+   "city": "Nashik",
+   "lat": 19.99,
+   "lon": 73.79,
+   "capacity": 600,
+   "stock": 800,
+   "demand": 0,
+   "risk": 0.29,
+   "top_factors": [
+    {
+     "feature": "monsoon_flood_index",
+     "impact": 0.06
+    },
+    {
+     "feature": "labour_dispute_score",
+     "impact": 0.05
+    },
+    {
+     "feature": "utilisation_pct",
+     "impact": -0.04
+    }
+   ],
+   "reliability": 0.898,
+   "utilization": 0.71
+  },
+  {
+   "id": "W1",
+   "name": "Bhiwandi DC",
+   "kind": "warehouse",
+   "city": "Mumbai",
+   "lat": 19.3,
+   "lon": 73.06,
+   "capacity": 900,
+   "stock": 1800,
+   "demand": 0,
+   "risk": 0.33,
+   "top_factors": [
+    {
+     "feature": "monsoon_flood_index",
+     "impact": 0.12
+    },
+    {
+     "feature": "days_of_cover",
+     "impact": -0.07
+    },
+    {
+     "feature": "dock_congestion",
+     "impact": 0.04
+    }
+   ],
+   "reliability": 0.885,
+   "utilization": 0.74
+  },
+  {
+   "id": "W2",
+   "name": "Gurugram DC",
+   "kind": "warehouse",
+   "city": "Delhi",
+   "lat": 28.46,
+   "lon": 77.03,
+   "capacity": 800,
+   "stock": 1600,
+   "demand": 0,
+   "risk": 0.26,
+   "top_factors": [
+    {
+     "feature": "fog_disruption_days",
+     "impact": 0.07
+    },
+    {
+     "feature": "days_of_cover",
+     "impact": -0.06
+    },
+    {
+     "feature": "dock_congestion",
+     "impact": 0.03
+    }
+   ],
+   "reliability": 0.909,
+   "utilization": 0.62
+  },
+  {
+   "id": "W3",
+   "name": "Sriperumbudur DC",
+   "kind": "warehouse",
+   "city": "Chennai",
+   "lat": 12.97,
+   "lon": 79.95,
+   "capacity": 600,
+   "stock": 700,
+   "demand": 0,
+   "risk": 0.58,
+   "top_factors": [
+    {
+     "feature": "cyclone_exposure",
+     "impact": 0.17
+    },
+    {
+     "feature": "days_of_cover",
+     "impact": 0.09
+    },
+    {
+     "feature": "inbound_lane_count",
+     "impact": 0.06
+    }
+   ],
+   "reliability": 0.797,
+   "utilization": 0.86
+  },
+  {
+   "id": "W4",
+   "name": "Nagpur Hub",
+   "kind": "warehouse",
+   "city": "Nagpur",
+   "lat": 21.15,
+   "lon": 79.09,
+   "capacity": 700,
+   "stock": 1300,
+   "demand": 0,
+   "risk": 0.41,
+   "top_factors": [
+    {
+     "feature": "betweenness_centrality",
+     "impact": 0.15
+    },
+    {
+     "feature": "heatwave_days",
+     "impact": 0.05
+    },
+    {
+     "feature": "days_of_cover",
+     "impact": -0.05
+    }
+   ],
+   "reliability": 0.857,
+   "utilization": 0.81
+  },
+  {
+   "id": "C1",
+   "name": "Mumbai Retail",
+   "kind": "customer",
+   "city": "Mumbai",
+   "lat": 19.08,
+   "lon": 72.88,
+   "capacity": 0,
+   "stock": 600,
+   "demand": 300,
+   "risk": 0.22,
+   "top_factors": [
+    {
+     "feature": "demand_volatility",
+     "impact": 0.08
+    },
+    {
+     "feature": "sourcing_paths",
+     "impact": -0.07
+    }
+   ],
+   "reliability": 0.923,
+   "utilization": 0.0
+  },
+  {
+   "id": "C2",
+   "name": "Delhi Retail",
+   "kind": "customer",
+   "city": "Delhi",
+   "lat": 28.7,
+   "lon": 77.1,
+   "capacity": 0,
+   "stock": 560,
+   "demand": 280,
+   "risk": 0.25,
+   "top_factors": [
+    {
+     "feature": "demand_volatility",
+     "impact": 0.09
+    },
+    {
+     "feature": "sourcing_paths",
+     "impact": -0.05
+    }
+   ],
+   "reliability": 0.912,
+   "utilization": 0.0
+  },
+  {
+   "id": "C3",
+   "name": "Bengaluru Retail",
+   "kind": "customer",
+   "city": "Bengaluru",
+   "lat": 12.93,
+   "lon": 77.62,
+   "capacity": 0,
+   "stock": 440,
+   "demand": 220,
+   "risk": 0.61,
+   "top_factors": [
+    {
+     "feature": "sourcing_paths",
+     "impact": 0.19
+    },
+    {
+     "feature": "upstream_risk_max",
+     "impact": 0.14
+    },
+    {
+     "feature": "demand_volatility",
+     "impact": 0.04
+    }
+   ],
+   "reliability": 0.786,
+   "utilization": 0.0
+  },
+  {
+   "id": "C4",
+   "name": "Hyderabad Retail",
+   "kind": "customer",
+   "city": "Hyderabad",
+   "lat": 17.44,
+   "lon": 78.38,
+   "capacity": 0,
+   "stock": 360,
+   "demand": 180,
+   "risk": 0.39,
+   "top_factors": [
+    {
+     "feature": "upstream_risk_max",
+     "impact": 0.09
+    },
+    {
+     "feature": "sourcing_paths",
+     "impact": -0.03
+    }
+   ],
+   "reliability": 0.864,
+   "utilization": 0.0
+  },
+  {
+   "id": "C5",
+   "name": "Jaipur Retail",
+   "kind": "customer",
+   "city": "Jaipur",
+   "lat": 26.91,
+   "lon": 75.79,
+   "capacity": 0,
+   "stock": 300,
+   "demand": 150,
+   "risk": 0.24,
+   "top_factors": [
+    {
+     "feature": "demand_volatility",
+     "impact": 0.05
+    },
+    {
+     "feature": "sourcing_paths",
+     "impact": -0.04
+    }
+   ],
+   "reliability": 0.916,
+   "utilization": 0.0
+  }
+ ],
+ "edges": [
+  {
+   "source": "S1",
+   "target": "F1",
+   "capacity": 500,
+   "lead": 2,
+   "cost": 42,
+   "co2": 3.1
+  },
+  {
+   "source": "S1",
+   "target": "F3",
+   "capacity": 450,
+   "lead": 1,
+   "cost": 18,
+   "co2": 1.2
+  },
+  {
+   "source": "S2",
+   "target": "F1",
+   "capacity": 600,
+   "lead": 1,
+   "cost": 22,
+   "co2": 1.5
+  },
+  {
+   "source": "S2",
+   "target": "F2",
+   "capacity": 400,
+   "lead": 2,
+   "cost": 35,
+   "co2": 2.4
+  },
+  {
+   "source": "S3",
+   "target": "F3",
+   "capacity": 400,
+   "lead": 2,
+   "cost": 30,
+   "co2": 2.2
+  },
+  {
+   "source": "S3",
+   "target": "F2",
+   "capacity": 300,
+   "lead": 3,
+   "cost": 48,
+   "co2": 3.6
+  },
+  {
+   "source": "S4",
+   "target": "F1",
+   "capacity": 250,
+   "lead": 4,
+   "cost": 85,
+   "co2": 6.8
+  },
+  {
+   "source": "S4",
+   "target": "F2",
+   "capacity": 250,
+   "lead": 3,
+   "cost": 70,
+   "co2": 5.4
+  },
+  {
+   "source": "F1",
+   "target": "W3",
+   "capacity": 550,
+   "lead": 1,
+   "cost": 14,
+   "co2": 0.9
+  },
+  {
+   "source": "F1",
+   "target": "W4",
+   "capacity": 350,
+   "lead": 2,
+   "cost": 38,
+   "co2": 2.7
+  },
+  {
+   "source": "F2",
+   "target": "W4",
+   "capacity": 400,
+   "lead": 1,
+   "cost": 20,
+   "co2": 1.4
+  },
+  {
+   "source": "F2",
+   "target": "W2",
+   "capacity": 350,
+   "lead": 3,
+   "cost": 55,
+   "co2": 4.1
+  },
+  {
+   "source": "F3",
+   "target": "W1",
+   "capacity": 450,
+   "lead": 1,
+   "cost": 12,
+   "co2": 0.8
+  },
+  {
+   "source": "F3",
+   "target": "W2",
+   "capacity": 200,
+   "lead": 3,
+   "cost": 50,
+   "co2": 3.9
+  },
+  {
+   "source": "W1",
+   "target": "C1",
+   "capacity": 400,
+   "lead": 1,
+   "cost": 8,
+   "co2": 0.4
+  },
+  {
+   "source": "W1",
+   "target": "C5",
+   "capacity": 150,
+   "lead": 2,
+   "cost": 32,
+   "co2": 2.3
+  },
+  {
+   "source": "W2",
+   "target": "C2",
+   "capacity": 350,
+   "lead": 1,
+   "cost": 9,
+   "co2": 0.5
+  },
+  {
+   "source": "W2",
+   "target": "C5",
+   "capacity": 200,
+   "lead": 1,
+   "cost": 15,
+   "co2": 1.0
+  },
+  {
+   "source": "W3",
+   "target": "C3",
+   "capacity": 350,
+   "lead": 1,
+   "cost": 10,
+   "co2": 0.6
+  },
+  {
+   "source": "W3",
+   "target": "C4",
+   "capacity": 150,
+   "lead": 2,
+   "cost": 26,
+   "co2": 1.8
+  },
+  {
+   "source": "W4",
+   "target": "C4",
+   "capacity": 250,
+   "lead": 1,
+   "cost": 12,
+   "co2": 0.8
+  },
+  {
+   "source": "W4",
+   "target": "C2",
+   "capacity": 200,
+   "lead": 2,
+   "cost": 34,
+   "co2": 2.6
+  },
+  {
+   "source": "W4",
+   "target": "C1",
+   "capacity": 120,
+   "lead": 2,
+   "cost": 36,
+   "co2": 2.7
+  }
+ ],
+ "resilience_score": 62.4
+}

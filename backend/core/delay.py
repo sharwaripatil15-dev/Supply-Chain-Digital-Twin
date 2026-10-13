@@ -1,0 +1,106 @@
+"""Delivery-delay estimation and bottleneck detection. Owner: A.
+
+Delay model (implemented):
+    For a day's flow solution, the arrival lead time of a node is the flow-weighted average of
+    (upstream arrival lead + lane lead) over its inbound lanes; suppliers start at 0. This is exactly the mean
+    path lead time of the units reaching that node when flow mixes proportionally at each node.
+    Extra delay for a customer = its arrival lead under the disrupted flow - its arrival lead under the
+    baseline (undisrupted) flow, i.e. the extra lead time caused by rerouting onto longer paths.
+    Units that are not delivered at all are counted as unmet demand, not as delay.
+
+`delay_stats` aggregates over the disruption window: per-customer units-weighted mean, plus avg and P90
+over every delivered unit. Possible extension: queueing delay when utilization > 1 (SimPy).
+"""
+from __future__ import annotations
+
+from typing import Iterable, Mapping
+
+import networkx as nx
+import numpy as np
+
+BOTTLENECK_THRESHOLD = 0.9
+
+Flow = Mapping[tuple[str, str], float]
+
+
+def arrival_lead(G: nx.DiGraph, flow: Flow) -> dict[str, float | None]:
+    """Flow-weighted mean lead time (days) from suppliers to each node; None where nothing arrives."""
+    lead: dict[str, float | None] = {}
+    for n in nx.topological_sort(G):
+        inbound = [(u, flow.get((u, n), 0.0)) for u in G.predecessors(n)]
+        inbound = [(u, f) for u, f in inbound if f > 0 and lead.get(u) is not None]
+        if G.nodes[n]["kind"] == "supplier":
+            lead[n] = 0.0
+        elif inbound:
+            total = sum(f for _, f in inbound)
+            lead[n] = sum(f * (lead[u] + G.edges[u, n]["lead"]) for u, f in inbound) / total
+        else:
+            lead[n] = None
+    return lead
+
+
+def _customer_samples(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[str, float | None]):
+    """Yield (customer, extra_days, units) per customer-day with deliveries."""
+    customers = [n for n, d in G.nodes(data=True) if d["kind"] == "customer"]
+    for flow in daily_flows:
+        lead = arrival_lead(G, flow)
+        for c in customers:
+            units = sum(flow.get((u, c), 0.0) for u in G.predecessors(c))
+            if units <= 0 or lead[c] is None:
+                continue
+            extra = max(0.0, lead[c] - (base_lead.get(c) or 0.0))
+            yield c, extra, units
+
+
+def customer_delays(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[str, float | None]) -> dict[str, float]:
+    """{customer_id: units-weighted mean extra lead time in days} over the given days."""
+    return delay_stats(G, daily_flows, base_lead)["per_customer"]
+
+
+def delay_stats(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[str, float | None]) -> dict:
+    """{avg_days, p90_days, per_customer}: avg and P90 are over every delivered unit in `daily_flows`."""
+    customers = [n for n, d in G.nodes(data=True) if d["kind"] == "customer"]
+    samples = list(_customer_samples(G, daily_flows, base_lead))
+    per_customer = {}
+    for c in customers:
+        rows = [(e, w) for cc, e, w in samples if cc == c]
+        wsum = sum(w for _, w in rows)
+        per_customer[c] = round(sum(e * w for e, w in rows) / wsum, 2) if wsum else 0.0
+    if not samples:
+        return {"avg_days": 0.0, "p90_days": 0.0, "per_customer": per_customer}
+    extra = np.array([e for _, e, _ in samples])
+    weight = np.array([w for _, _, w in samples])
+    order = np.argsort(extra)
+    cum = np.cumsum(weight[order]) / weight.sum()
+    p90 = float(extra[order][np.searchsorted(cum, 0.9)])
+    return {
+        "avg_days": round(float(np.average(extra, weights=weight)), 2),
+        "p90_days": round(p90, 2),
+        "per_customer": per_customer,
+    }
+
+
+def summarize_delays(per_customer: Mapping[str, float]) -> dict:
+    """{avg_days, p90_days, per_customer} from per-customer delays (implemented)."""
+    values = list(per_customer.values()) or [0.0]
+    return {
+        "avg_days": round(float(np.mean(values)), 2),
+        "p90_days": round(float(np.percentile(values, 90)), 2),
+        "per_customer": {k: round(float(v), 2) for k, v in per_customer.items()},
+    }
+
+
+def find_bottlenecks(timeline: Iterable[dict], threshold: float = BOTTLENECK_THRESHOLD) -> list[dict]:
+    """Nodes whose utilization exceeds `threshold` on any day, with their peak and the peak day (implemented).
+
+    Sorted by peak utilization, highest first.
+    """
+    peak: dict[str, tuple[float, int]] = {}
+    for row in timeline:
+        for node, u in row.get("utilization", {}).items():
+            if u > threshold and u > peak.get(node, (0.0, 0))[0]:
+                peak[node] = (u, row["day"])
+    return [
+        {"node": n, "utilization": round(u, 3), "day": d}
+        for n, (u, d) in sorted(peak.items(), key=lambda kv: -kv[1][0])
+    ]
