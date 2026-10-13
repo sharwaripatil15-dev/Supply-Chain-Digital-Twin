@@ -6,6 +6,7 @@ import { peakDisruption, recoveryLanes, targetNodes } from '../lib/disruption.js
 import { Badge, Button, PageHeader, SegmentedControl, useToast } from '../components/ui/index.js'
 import RecoverCompare from '../components/RecoverCompare.jsx'
 import AlternatesPanel from '../components/AlternatesPanel.jsx'
+import InventoryProductionOptimizer from '../components/InventoryProductionOptimizer.jsx'
 import Playbook from '../components/Playbook.jsx'
 import GraphPanel from '../components/GraphPanel.jsx'
 
@@ -81,6 +82,7 @@ export default function RecoverPage() {
             view3d={{ mode: after ? 'after' : 'baseline', rerouted }}
           />
         )}
+        <InventoryProductionOptimizer />
         <AlternatesPanel />
         <Playbook />
       </div>

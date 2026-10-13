@@ -73,6 +73,8 @@ const initial = {
   riskStatus: null,
   advisory: null,
   alternates: null,
+  optimizedPlan: null,
+  dashboardSummary: null,
   events: DEMO_SCENARIOS[0].events,
   horizon: 30,
   sim: null,
@@ -210,6 +212,10 @@ export function StoreProvider({ children }) {
         request('riskPredict', () => api.predictRisk(events), (riskPrediction) => ({ riskPrediction })),
       loadAdvisory: () => request('advisory', api.advisory, (advisory) => ({ advisory })),
       loadAlternates: (events = []) => request('alternates', () => api.alternates(events), (alternates) => ({ alternates })),
+      runOptimizePlan: (events = [], levers = ['reroute', 'backup', 'overtime', 'safety_stock', 'production_shift']) =>
+        request('optimize', () => api.optimizePlan(events, levers), (optimizedPlan) => ({ optimizedPlan })),
+      loadDashboardSummary: (events = []) =>
+        request('dashboard', () => api.dashboardSummary(events), (dashboardSummary) => ({ dashboardSummary })),
       uploadCsv: async (nodesFile, edgesFile, activate) => {
         const res = await request('upload', () => api.upload(nodesFile, edgesFile, activate), (upload) => ({ upload, selectedNode: null }))
         if (res?.activated) await loadNetwork()

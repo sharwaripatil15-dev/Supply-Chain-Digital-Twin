@@ -3,6 +3,7 @@ import { useStore } from './store.js'
 import AppShell from './components/layout/AppShell.jsx'
 import { Card, InlineError, Skeleton } from './components/ui/index.js'
 import TwinPage from './pages/TwinPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
 import WhatIfPage from './pages/WhatIfPage.jsx'
 import RecoverPage from './pages/RecoverPage.jsx'
 import DataPage from './pages/DataPage.jsx'
@@ -10,6 +11,7 @@ import ChaosFinder from './components/ChaosFinder.jsx'
 
 const PAGES = {
   twin: TwinPage,
+  dashboard: DashboardPage,
   whatif: WhatIfPage,
   simulate: WhatIfPage,
   chaos: ChaosFinder,

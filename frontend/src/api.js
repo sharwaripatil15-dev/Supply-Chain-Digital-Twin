@@ -21,6 +21,9 @@ export const api = {
   advisory: () => data(client.get('/ai-advisory')),
   alternates: (events = [], down_suppliers = [], down_lanes = []) =>
     data(client.post('/recommend/alternates', { events, down_suppliers, down_lanes })),
+  optimizePlan: (events = [], levers = ['reroute', 'backup', 'overtime', 'safety_stock', 'production_shift'], horizon = 30) =>
+    data(client.post('/optimize/plan', { events, levers, horizon })),
+  dashboardSummary: (events = []) => data(client.post('/dashboard/summary', events)),
   upload: (nodesFile, edgesFile, activate = false) => {
     const form = new FormData()
     form.append('nodes', nodesFile)

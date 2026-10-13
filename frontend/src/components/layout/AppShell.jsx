@@ -3,6 +3,7 @@ import {
   Activity,
   Database,
   FlaskConical,
+  LayoutDashboard,
   LifeBuoy,
   Moon,
   Network,
@@ -21,6 +22,7 @@ import NodeDrawer from '../NodeDrawer.jsx'
 
 export const PAGES = [
   { id: 'twin', label: 'Twin', icon: Network, title: 'Digital twin' },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, title: 'Disruptions & recovery dashboard' },
   { id: 'simulate', label: 'Simulator', icon: Activity, title: 'Disruption simulator' },
   { id: 'chaos', label: 'Chaos Finder', icon: Radar, title: 'Chaos Finder' },
   { id: 'recover', label: 'Recover', icon: LifeBuoy, title: 'Recovery planner' },
