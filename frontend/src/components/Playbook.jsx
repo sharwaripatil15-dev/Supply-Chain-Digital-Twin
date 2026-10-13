@@ -1,26 +1,27 @@
-import { ClipboardList } from 'lucide-react'
 import { useStore } from '../store.js'
-import { Card, CardBody, CardHeader } from './ui/index.js'
+import { EmptyState } from './ui/index.js'
+import { InspectorPanel } from './layout/Workspace.jsx'
 
+/** The action playbook as a numbered list (narrated from engine output only). */
 export default function Playbook() {
-  const { recover } = useStore()
-  if (!recover?.playbook?.length) return null
+  const { recover, loading } = useStore()
+  const steps = recover?.playbook ?? []
   return (
-    <Card>
-      <CardHeader title="Action playbook" description="Narrated from engine output only: no number is computed by the LLM" icon={ClipboardList} />
-      <CardBody>
-        <ol className="space-y-3">
-          {recover.playbook.map((step, i) => {
+    <InspectorPanel title="Playbook" meta="Narrated from engine output; no number comes from the LLM">
+      {steps.length === 0 ? (
+        <EmptyState title={loading.recover ? 'Planning…' : 'No playbook yet'} description={loading.recover ? undefined : 'Compute a recovery plan first.'} />
+      ) : (
+        <ol className="space-y-3 px-4 py-3">
+          {steps.map((step, i) => {
             const m = /^(Day \d+[^:]*|Post-incident):\s*(.*)$/.exec(step)
             return (
-              <li key={i} className="flex gap-3">
-                <span className="tabular flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-semibold text-accent">
-                  {i + 1}
-                </span>
-                <p className="pt-0.5 text-sm text-fg-2">
+              <li key={i} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 text-sm">
+                <span className="num pt-px text-xs text-fg-muted">{String(i + 1).padStart(2, '0')}</span>
+                <p className="text-fg-2">
                   {m ? (
                     <>
-                      <span className="font-medium text-fg">{m[1]}</span> · {m[2]}
+                      <span className="font-medium text-fg">{m[1]}</span>
+                      <span className="block">{m[2]}</span>
                     </>
                   ) : (
                     step
@@ -30,7 +31,7 @@ export default function Playbook() {
             )
           })}
         </ol>
-      </CardBody>
-    </Card>
+      )}
+    </InspectorPanel>
   )
 }

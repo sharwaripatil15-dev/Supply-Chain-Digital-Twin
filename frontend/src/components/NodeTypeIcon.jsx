@@ -13,7 +13,7 @@ export function TypeGlyph({ kind, className, strokeWidth = 2.2 }) {
   )
 }
 
-const SIZES = { xs: 'h-4 w-4 rounded', sm: 'h-5 w-5 rounded-md', md: 'h-7 w-7 rounded-lg', lg: 'h-9 w-9 rounded-lg' }
+const SIZES = { xs: 'h-4 w-4 rounded-sm', sm: 'h-5 w-5 rounded-sm', md: 'h-7 w-7 rounded-md', lg: 'h-8 w-8 rounded-md' }
 const GLYPH = { xs: 'h-2.5 w-2.5', sm: 'h-3 w-3', md: 'h-4 w-4', lg: 'h-5 w-5' }
 
 /** Small type chip: white glyph on the type color. */
@@ -21,7 +21,7 @@ export function TypeIcon({ kind, size = 'sm', className, title }) {
   const t = typeOf(kind)
   return (
     <span
-      className={cn('inline-flex shrink-0 items-center justify-center text-white ring-1 ring-inset ring-black/10 dark:ring-white/25', SIZES[size], className)}
+      className={cn('inline-flex shrink-0 items-center justify-center text-white ring-1 ring-inset ring-fg/10', SIZES[size], className)}
       style={{ backgroundColor: t.color }}
       title={title ?? t.label}
       role="img"
@@ -63,8 +63,8 @@ export function NodeTag({ id, node: nodeProp, showName = true, size = 'xs', clas
   return (
     <span className={cn('inline-flex min-w-0 items-center gap-1.5', className)}>
       <TypeIcon kind={node?.kind} size={size} />
-      <span className="font-medium text-fg">{nid}</span>
-      {showName && node?.name && node.name !== nid && <span className={cn('truncate font-normal text-fg-2', nameClassName)}>{node.name}</span>}
+      <span className="num shrink-0 text-xs text-fg">{nid}</span>
+      {showName && node?.name && node.name !== nid && <span className={cn('truncate text-fg-2', nameClassName)}>{node.name}</span>}
     </span>
   )
 }

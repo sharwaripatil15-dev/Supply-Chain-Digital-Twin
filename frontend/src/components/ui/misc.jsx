@@ -1,103 +1,37 @@
-import { useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
 import { cn } from './cn.js'
-import { Button } from './Button.jsx'
 
-/** Page header: title + one-line description + actions. */
-export function PageHeader({ title, description, actions }) {
-  return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight text-fg">{title}</h1>
-        {description && <p className="mt-1 text-sm text-fg-muted">{description}</p>}
-      </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-    </div>
-  )
-}
-
-/** Hover/focus tooltip for icon buttons and truncated text. */
-export function Tooltip({ content, children, side = 'top', className }) {
-  return (
-    <span className={cn('group/tt relative inline-flex', className)}>
-      {children}
-      <span
-        role="tooltip"
-        className={cn(
-          'pointer-events-none absolute left-1/2 z-40 -translate-x-1/2 whitespace-nowrap rounded-md bg-fg px-2 py-1 text-xs font-medium text-bg opacity-0',
-          'transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100',
-          side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
-        )}
-      >
-        {content}
-      </span>
-    </span>
-  )
-}
-
-/** Horizontal meter. `value` 0..max; optional threshold tick; tone switches to warn above the threshold. */
-export function Meter({ value, max = 1, threshold, tone, className, label }) {
-  const pct = Math.max(0, Math.min(1, (value || 0) / max)) * 100
+/** Horizontal meter. `value` 0..max; optional threshold tick; `tone` = 'muted' | 'accent' | 'warn'. */
+export function Meter({ value, max = 1, threshold, tone = 'muted', className, label }) {
+  const pct = Math.max(0, Math.min(1, (value || 0) / (max || 1))) * 100
   const hot = threshold != null && value > threshold
-  const bar = tone === 'muted' ? 'bg-fg-muted/50' : hot ? 'bg-warn' : 'bg-accent'
+  const bar = hot ? 'bg-warn' : tone === 'accent' ? 'bg-accent' : tone === 'warn' ? 'bg-warn' : 'bg-fg-muted/55'
   return (
     <div
-      className={cn('relative h-1.5 w-full rounded-full bg-surface-3', className)}
+      className={cn('relative h-1 w-full rounded-full bg-raised', className)}
       role="meter"
       aria-label={label}
       aria-valuenow={Math.round((value || 0) * 100) / 100}
       aria-valuemin={0}
       aria-valuemax={max}
     >
-      <div className={cn('h-full rounded-full transition-[width] duration-200', bar)} style={{ width: `${pct}%` }} />
-      {threshold != null && (
-        <span className="absolute -top-0.5 h-2.5 w-px bg-fg-muted" style={{ left: `${(threshold / max) * 100}%` }} aria-hidden />
-      )}
+      <div className={cn('h-full rounded-full transition-[width] duration-150', bar)} style={{ width: `${pct}%` }} />
+      {threshold != null && <span className="absolute -top-0.5 h-2 w-px bg-fg-muted" style={{ left: `${(threshold / max) * 100}%` }} aria-hidden />}
     </div>
   )
 }
 
-/** Right-side drawer. Closes on Escape; focus moves into it when opened. */
-export function Drawer({ open, onClose, title, subtitle, children }) {
-  const ref = useRef(null)
-  useEffect(() => {
-    if (!open) return
-    ref.current?.focus()
-    const onKey = (e) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-  if (!open) return null
-  return (
-    <aside
-      ref={ref}
-      tabIndex={-1}
-      role="dialog"
-      aria-label={typeof title === 'string' ? title : 'Details'}
-      className="fixed inset-y-0 right-0 z-40 flex w-[360px] max-w-full animate-slide-in flex-col border-l border-border bg-surface shadow-card outline-none"
-    >
-      <header className="flex items-start gap-3 border-b border-border px-5 py-4">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-fg">{title}</div>
-          {subtitle && <div className="mt-0.5 text-xs text-fg-muted">{subtitle}</div>}
-        </div>
-        <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close details" icon={X} />
-      </header>
-      <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
-    </aside>
-  )
-}
-
-/** Pressed-state toggle chip (layer toggles etc.). */
-export function Toggle({ pressed, onChange, children, icon: Icon }) {
+/** Pressed-state toggle (layer switches on the canvas). */
+export function Toggle({ pressed, onChange, children, icon: Icon, disabled, title }) {
   return (
     <button
       type="button"
       aria-pressed={pressed}
+      disabled={disabled}
+      title={title}
       onClick={() => onChange(!pressed)}
       className={cn(
-        'inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors duration-150',
-        pressed ? 'border-accent/30 bg-accent/10 text-accent' : 'border-border bg-surface text-fg-muted hover:text-fg',
+        'inline-flex h-6 items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors duration-150 disabled:opacity-40',
+        pressed ? 'bg-raised text-fg' : 'text-fg-muted hover:text-fg',
       )}
     >
       {Icon && <Icon className="h-3.5 w-3.5" aria-hidden />}
@@ -106,40 +40,7 @@ export function Toggle({ pressed, onChange, children, icon: Icon }) {
   )
 }
 
-/**
- * Modal confirmation. Escape or the backdrop cancels; focus starts on the safe (cancel) button.
- * tone="danger" styles the confirm button for destructive actions.
- */
-export function ConfirmDialog({ open, title, children, confirmLabel = 'Confirm', tone = 'danger', busy = false, onConfirm, onCancel }) {
-  const cancelRef = useRef(null)
-  useEffect(() => {
-    if (!open) return
-    cancelRef.current?.focus()
-    const onKey = (e) => e.key === 'Escape' && onCancel?.()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onCancel])
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button type="button" aria-label="Cancel" className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[1px]" onClick={onCancel} />
-      <div role="alertdialog" aria-modal="true" aria-label={title} className="relative w-full max-w-md animate-fade-in rounded-card border border-border bg-surface p-5 shadow-card">
-        <h2 className="text-sm font-semibold text-fg">{title}</h2>
-        <div className="mt-2 text-sm text-fg-2">{children}</div>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button ref={cancelRef} onClick={onCancel} disabled={busy}>
-            Cancel
-          </Button>
-          <Button
-            variant={tone === 'danger' ? 'secondary' : 'primary'}
-            className={tone === 'danger' ? 'border-bad/40 text-bad hover:border-bad hover:bg-bad/10' : ''}
-            onClick={onConfirm}
-            disabled={busy}
-          >
-            {busy ? 'Working…' : confirmLabel}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
+/** Hairline vertical divider for toolbars. */
+export function Divider({ className }) {
+  return <span className={cn('h-5 w-px shrink-0 bg-border', className)} aria-hidden />
 }

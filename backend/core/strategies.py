@@ -8,6 +8,10 @@ Strategies (each a core.optimizer plan with a lever set; "Do nothing" is the pla
     Production shift  move production between plants, with the rerouting it needs
     Full plan         every lever, standard CO2 price
     Green plan        every lever with a 15x CO2 price (trades cost for emissions)
+    Weather-aware reroute   (only when the scenario has weather events) reroute + inventory buffer, planned on lane
+                      costs that price weather: + WEATHER_RISK_INR x severity and + WEATHER_DAY_INR per extra day of lead
+                      time (lead x (lead_multiplier - 1)), so flows leave storm-hit lanes before they fail and stock is
+                      staged ahead of the window. Costs are reported at real lane prices.
 
 Fix-safety check (the USP): a fix must not leave the network more fragile than it was.
     Apply the plan to a copy of the graph *as it runs during the disruption*: every event at full effect, the plan's
@@ -28,13 +32,17 @@ from typing import Iterable
 import networkx as nx
 
 from core import chaos
-from core.optimizer import LEVERS, W_CO2, optimize_plan
+from core.optimizer import LEVERS, W_CO2, baseline, lane_cost, optimize_plan
 from core.sim import _active_state, spike_baseline
 from schemas import Event
 
 NEW_SPOF_THRESHOLD = 0.30
 RESILIENCE_TOLERANCE = 0.5
 GREEN_CO2_MULTIPLIER = 15
+WEATHER_STRATEGY = "Weather-aware reroute"
+WEATHER_LEVERS = ("reroute", "safety_stock")
+WEATHER_RISK_INR = 250.0  # per unit shipped on a lane at full weather severity
+WEATHER_DAY_INR = 40.0  # per unit per extra day of weather lead time
 
 STRATEGIES = [
     ("Do nothing", (), W_CO2),
@@ -136,18 +144,55 @@ def _describe(name: str, plan: dict) -> str:
         return "Keep today's lane allocations; retailer/customer stock absorbs what it can." + stock
     if not bits:
         return "No lever in this strategy helps here; same outcome as re-planning alone." + stock
-    prefix = "Prices CO2 15x higher: " if name == "Green plan" else ""
+    prefix = {"Green plan": "Prices CO2 15x higher: ", WEATHER_STRATEGY: "Prices weather risk into lane costs: "}.get(name, "")
     text = "; ".join(bits)
     return prefix + text[0].upper() + text[1:] + "." + stock
+
+
+def has_weather(events: Iterable[Event]) -> bool:
+    return any(getattr(e, "source", None) == "weather" for e in events)
+
+
+def weather_priced_graph(G: nx.DiGraph, events: Iterable[Event]) -> nx.DiGraph:
+    """Copy of G whose lane costs include the weather price of the (worst) weather event on each lane."""
+    H = G.copy()
+    worst: dict[tuple[str, str], tuple[float, float]] = {}
+    for ev in events:
+        if ev.type != "edge" or getattr(ev, "source", None) != "weather":
+            continue
+        u, v = (p.strip() for p in ev.target.split("->"))
+        sev, lead = worst.get((u, v), (0.0, 1.0))
+        worst[(u, v)] = (max(sev, ev.severity), max(lead, ev.lead_multiplier or 1.0))
+    for (u, v), (sev, lead) in worst.items():
+        if (u, v) in H.edges:
+            d = H.edges[u, v]
+            d["cost"] = d["cost"] + WEATHER_RISK_INR * sev + WEATHER_DAY_INR * d["lead"] * (lead - 1.0)
+    return H
+
+
+def weather_plan(G: nx.DiGraph, events: list[Event], horizon: int = 30) -> dict:
+    """The weather-aware plan, optimised on weather-priced lanes, then costed at real lane prices."""
+    plan = optimize_plan(weather_priced_graph(G, events), events, WEATHER_LEVERS, horizon=horizon)
+    if plan["daily_flows"]:
+        base = baseline(G)
+        transport = sum(lane_cost(G, *e) * f for flows in plan["daily_flows"] for e, f in flows.items())
+        delivered = sum(base["flow"]["served"].values()) * len(plan["daily_flows"]) - plan["unmet"] - plan["stock_drawn"]
+        plan["cost_breakdown"]["extra_freight"] = round(max(0.0, transport - base["cost_per_unit"] * max(0.0, delivered)), 0)
+        plan["cost"] = round(sum(plan["cost_breakdown"].values()), 0)
+    return plan
 
 
 def run_strategies(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30) -> list[dict]:
     """Strategy rows in the RecoverResponse shape, plus a private "_plan" per row (stripped by the API)."""
     events = list(events)
     unit_price = G.graph.get("unit_price", 4200)
-    plans = {name: optimize_plan(G, events, levers, horizon=horizon, w_co2=w_co2) for name, levers, w_co2 in STRATEGIES}
+    strategies = list(STRATEGIES)
+    plans = {name: optimize_plan(G, events, levers, horizon=horizon, w_co2=w_co2) for name, levers, w_co2 in strategies}
+    if has_weather(events):
+        strategies.append((WEATHER_STRATEGY, WEATHER_LEVERS, W_CO2))
+        plans[WEATHER_STRATEGY] = weather_plan(G, events, horizon)
     rows = []
-    for name, levers, _ in STRATEGIES:
+    for name, levers, _ in strategies:
         plan = plans[name]
         check = safety_check(G, events, plan)
         rows.append({

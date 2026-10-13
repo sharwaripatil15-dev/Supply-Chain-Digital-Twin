@@ -38,6 +38,17 @@ export const api = {
   exportNetwork: (scope = 'manual') => data(client.get('/network/export', { params: { scope } })),
   exportCsv: (file, scope = 'manual') => data(client.get('/network/export/csv', { params: { file, scope }, responseType: 'text' })),
   importNetwork: (network, activate = false) => data(client.post('/network/import', network, { params: { activate } })),
+
+  // ------------------------------------------------ weather- and hazard-aware routing
+  weatherRisk: (horizon = 7, refresh = false) => data(client.get('/weather/risk', { params: { horizon, refresh } })),
+  weatherHazards: (horizon = 7) => data(client.get('/weather/hazards', { params: { horizon } })),
+  weatherApply: (body) => data(client.post('/weather/apply', body)),
+  weatherClear: () => data(client.delete('/weather/apply')),
+  weatherReroute: (body) => data(client.post('/weather/reroute', body)),
+  weatherScenarios: () => data(client.get('/weather/simulated-scenarios')),
+  setWeatherScenario: (id) => data(client.post('/weather/simulated-scenarios', { id })),
+  weatherStatus: () => data(client.get('/weather/status')),
+  weatherChaos: (horizon = 7) => data(client.get('/weather/chaos', { params: { horizon } })),
 }
 
 export function errorMessage(err) {

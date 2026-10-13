@@ -3,101 +3,187 @@
 @tailwind utilities;
 
 /*
- * AEGIS design tokens - the only place colors are defined.
- * Values are space-separated RGB channels so Tailwind can apply opacity (bg-accent/10).
+ * AEGIS design tokens: the only place UI colors, type and elevation are defined.
+ * Colors are space-separated RGB channels so Tailwind can apply opacity (bg-accent/10).
  * JS consumers (Cytoscape, Recharts, deck.gl) read the same variables through useTokens().
+ * Node-type and status-ring colors encode data and are fixed in src/lib/nodeTypes.js.
  */
 @layer base {
   :root {
     color-scheme: light;
-    --bg: 250 250 250;
-    --surface: 255 255 255;
-    --surface-2: 244 244 245;
-    --surface-3: 228 228 231;
-    --border: 228 228 231;
-    --border-strong: 212 212 216;
-    --fg: 24 24 27;
-    --fg-2: 82 82 91;
-    --fg-muted: 113 113 122;
-    --accent: 79 70 229;
-    --accent-hover: 67 56 202;
+    /* neutrals, 4 steps */
+    --bg: 246 247 249; /* app background */
+    --surface: 255 255 255; /* panels, tables, canvas frame */
+    --raised: 241 243 246; /* hover, selection, tracks, skeletons */
+    --border: 228 231 236; /* hairlines */
+    --border-strong: 206 211 219; /* form controls */
+    /* text */
+    --fg: 22 25 31;
+    --fg-2: 72 79 92;
+    --fg-muted: 104 111 125;
+    /* one accent: primary actions, selection, focus */
+    --accent: 62 75 184;
+    --accent-hover: 50 61 158;
     --accent-fg: 255 255 255;
-    --ok: 22 163 74;
-    --warn: 217 119 6;
-    --bad: 220 38 38;
-    /* node-type palette: fixed in both themes, mirrors src/lib/nodeTypes.js (never red/amber/green) */
+    /* status (text-safe on surface, AA) */
+    --ok: 21 128 61;
+    --warn: 180 83 9;
+    --bad: 196 43 43;
+    /* node types (fixed, theme-independent) */
     --tier-supplier: 139 92 246;
     --tier-factory: 37 99 235;
     --tier-warehouse: 13 148 136;
     --tier-retailer: 219 39 119;
     --tier-customer: 71 85 105;
-    --map-bg: 241 241 243;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+    /* canvas */
+    --map-bg: 238 240 243;
+    --vignette: 15 23 42;
+    --vignette-alpha: 0.07;
+    /* elevation: floating layers only */
+    --shadow-float: 0 1px 2px rgb(16 24 40 / 0.06), 0 8px 24px -6px rgb(16 24 40 / 0.14);
+    --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 
   :root.dark {
     color-scheme: dark;
-    --bg: 9 9 11;
-    --surface: 17 17 19;
-    --surface-2: 24 24 27;
-    --surface-3: 39 39 42;
-    --border: 39 39 42;
-    --border-strong: 63 63 70;
-    --fg: 244 244 245;
-    --fg-2: 161 161 170;
-    --fg-muted: 133 133 142;
-    --accent: 129 140 248;
-    --accent-hover: 165 180 252;
-    --accent-fg: 17 17 19;
-    --ok: 34 197 94;
-    --warn: 245 158 11;
+    --bg: 10 12 16;
+    --surface: 17 19 24;
+    --raised: 26 29 35;
+    --border: 38 42 51;
+    --border-strong: 54 60 72;
+    --fg: 231 233 238;
+    --fg-2: 174 180 192;
+    --fg-muted: 139 146 160;
+    --accent: 140 151 242;
+    --accent-hover: 166 175 246;
+    --accent-fg: 14 16 24;
+    --ok: 74 222 128;
+    --warn: 251 191 36;
     --bad: 248 113 113;
-    --tier-supplier: 139 92 246;
-    --tier-factory: 37 99 235;
-    --tier-warehouse: 13 148 136;
-    --tier-retailer: 219 39 119;
-    --tier-customer: 71 85 105;
-    --map-bg: 14 14 16;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    --map-bg: 13 16 21;
+    --vignette: 0 0 0;
+    --vignette-alpha: 0.45;
+    --shadow-float: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -6px rgb(0 0 0 / 0.6);
   }
 
   html {
-    font-family: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
     font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   body {
-    @apply bg-bg text-fg text-sm;
+    @apply bg-bg text-sm text-fg;
   }
 
+  /* One visible focus treatment everywhere (form controls draw their own ring). */
   :focus-visible {
-    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-bg;
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
-  input[type='range'] {
-    accent-color: rgb(var(--accent));
+  ::selection {
+    @apply bg-accent/20;
   }
 
   input[type='checkbox'] {
     accent-color: rgb(var(--accent));
   }
 
-  ::selection {
-    @apply bg-accent/20;
+  /* Quiet scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--border-strong)) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background: rgb(var(--border-strong)) content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
 
 @layer components {
-  .input {
-    @apply h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm text-fg transition-colors duration-150
-      placeholder:text-fg-muted hover:border-border-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20;
+  /* Form control base (Input, Select, Textarea primitives). */
+  .control {
+    @apply h-8 w-full rounded-md border border-border-strong bg-surface px-2.5 text-sm text-fg transition-colors duration-150
+      placeholder:text-fg-muted hover:border-fg-muted/60 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15
+      disabled:cursor-not-allowed disabled:bg-raised disabled:text-fg-muted;
   }
-  textarea.input {
-    @apply h-auto py-2 leading-5;
+  .control:focus-visible {
+    outline: none;
   }
-  .label {
-    @apply text-xs font-medium text-fg-2;
+  .control-sm {
+    @apply h-7 text-xs;
+  }
+  textarea.control {
+    @apply h-auto py-1.5 leading-5;
+  }
+  .control-invalid {
+    @apply border-bad hover:border-bad focus:border-bad focus:ring-bad/15;
+  }
+
+  /* Selected table row: accent edge on the first cell (tr box-shadows are not painted). */
+  tr[data-selected] > td:first-child {
+    box-shadow: inset 2px 0 0 rgb(var(--accent));
+  }
+
+  /* Tiny uppercase section label: the only place caps are used. */
+  .section-label {
+    @apply text-2xs font-medium uppercase tracking-[0.06em] text-fg-muted;
+  }
+
+  /* Thin range slider (timeline, severity). */
+  .range {
+    @apply h-4 w-full cursor-pointer appearance-none bg-transparent;
+  }
+  .range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: rgb(var(--border-strong));
+  }
+  .range::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: rgb(var(--border-strong));
+  }
+  .range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 14px;
+    width: 14px;
+    margin-top: -5px;
+    border-radius: 999px;
+    border: 2px solid rgb(var(--surface));
+    background: rgb(var(--accent));
+    box-shadow: 0 0 0 1px rgb(var(--accent));
+  }
+  .range::-moz-range-thumb {
+    height: 10px;
+    width: 10px;
+    border-radius: 999px;
+    border: 2px solid rgb(var(--surface));
+    background: rgb(var(--accent));
+  }
+  .range:focus-visible {
+    outline: none;
+  }
+  .range:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 1px rgb(var(--accent)), 0 0 0 4px rgb(var(--accent) / 0.25);
+  }
+
+  /* Soft depth falloff at the edges of the 3D scene (scene atmosphere, not UI chrome). */
+  .map-vignette {
+    box-shadow: inset 0 0 140px rgb(var(--vignette) / var(--vignette-alpha));
   }
 }
 
@@ -105,6 +191,37 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+  /* IDs, numbers, coordinates */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Lucide icons: one stroke weight everywhere. */
+.lucide {
+  stroke-width: 1.5;
+}
+
+/* Chart text: neutral 11px, numbers in mono. */
+.recharts-cartesian-axis-tick text,
+.recharts-reference-line text {
+  font-family: var(--font-mono);
+}
+.recharts-wrapper text {
+  font-size: 11px;
+}
+
+/* Row actions appear on hover or keyboard focus only (no icon on every line). */
+.row-actions {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+tr:hover .row-actions,
+tr:focus-within .row-actions,
+tr[data-selected] .row-actions {
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -112,13 +229,14 @@
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
 
 /* MapLibre attribution, restyled to the tokens */
 .maplibregl-ctrl-attrib {
-  @apply !bg-surface/80 !text-fg-muted text-xs;
+  @apply !bg-surface/80 text-2xs !text-fg-muted;
 }
 .maplibregl-ctrl-attrib a {
   @apply !text-fg-muted;

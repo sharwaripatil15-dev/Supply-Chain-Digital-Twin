@@ -30,7 +30,7 @@ import networkx as nx
 import pulp
 
 from core.delay import arrival_lead, delay_stats
-from core.sim import BACKUP_ACTIVATION_DAYS, BACKUP_COST_FACTOR, _active_state, solve_flow, spike_baseline
+from core.sim import BACKUP_ACTIVATION_DAYS, BACKUP_COST_FACTOR, _active_state, lead_factors, solve_flow, spike_baseline
 from node_types import is_demand, total_demand
 from schemas import Event
 
@@ -243,7 +243,7 @@ def optimize_plan(
         stock_drawn=round(sum(val(v) for v in s.values()), 1),
         recovery_days=(shortfall_days[-1] - days[0] + 1) if shortfall_days else 0,
         co2=round(val(co2_kg) / 1000, 2),
-        delay=delay_stats(G, daily_flows, base["lead"]),
+        delay=delay_stats(G, daily_flows, base["lead"], [lead_factors(events, t) for t in days]),
         daily_flows=daily_flows,
         capacity_delta=cap_delta,
         rerouted_lanes=sorted(f"{e[0]}->{e[1]}" for e in edges if any(val(x[e, t]) > base["flow"]["flow"].get(e, 0.0) + EPS for t in days)),

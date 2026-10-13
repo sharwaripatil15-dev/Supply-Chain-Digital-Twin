@@ -8,6 +8,8 @@ Delay model (implemented):
     Extra delay for a demand node (retailer or customer) = its arrival lead under the disrupted flow - its arrival lead under the
     baseline (undisrupted) flow, i.e. the extra lead time caused by rerouting onto longer paths.
     Units that are not delivered at all are counted as unmet demand, not as delay.
+    Weather slowdowns: edge events may carry a lead_multiplier; the lane's lead is multiplied by it on the days the
+    event is active (`lead_mult` / `daily_lead`), so slower-but-open lanes show up as delay.
 
 `delay_stats` aggregates over the disruption window: per-customer units-weighted mean, plus avg and P90
 over every delivered unit. Possible extension: queueing delay when utilization > 1 (SimPy).
@@ -26,8 +28,11 @@ BOTTLENECK_THRESHOLD = 0.9
 Flow = Mapping[tuple[str, str], float]
 
 
-def arrival_lead(G: nx.DiGraph, flow: Flow) -> dict[str, float | None]:
-    """Flow-weighted mean lead time (days) from suppliers to each node; None where nothing arrives."""
+def arrival_lead(G: nx.DiGraph, flow: Flow, lead_mult: Mapping[tuple[str, str], float] | None = None) -> dict[str, float | None]:
+    """Flow-weighted mean lead time (days) from suppliers to each node; None where nothing arrives.
+
+    lead_mult: optional {(u, v): factor} applied to lane leads (weather slowdowns)."""
+    lead_mult = lead_mult or {}
     lead: dict[str, float | None] = {}
     try:
         order = list(nx.topological_sort(G))
@@ -40,17 +45,19 @@ def arrival_lead(G: nx.DiGraph, flow: Flow) -> dict[str, float | None]:
             lead[n] = 0.0
         elif inbound:
             total = sum(f for _, f in inbound)
-            lead[n] = sum(f * (lead[u] + G.edges[u, n]["lead"]) for u, f in inbound) / total
+            lead[n] = sum(f * (lead[u] + G.edges[u, n]["lead"] * lead_mult.get((u, n), 1.0)) for u, f in inbound) / total
         else:
             lead[n] = None
     return lead
 
 
-def _customer_samples(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[str, float | None]):
+def _customer_samples(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[str, float | None], daily_lead=None):
     """Yield (demand node, extra_days, units) per node-day with deliveries."""
     customers = demand_nodes(G)
-    for flow in daily_flows:
-        lead = arrival_lead(G, flow)
+    daily_flows = list(daily_flows)
+    daily_lead = list(daily_lead or []) + [None] * (len(daily_flows) - len(daily_lead or []))
+    for flow, mult in zip(daily_flows, daily_lead):
+        lead = arrival_lead(G, flow, mult)
         for c in customers:
             units = sum(flow.get((u, c), 0.0) for u in G.predecessors(c))
             if units <= 0 or lead.get(c) is None:
@@ -64,13 +71,14 @@ def customer_delays(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mappi
     return delay_stats(G, daily_flows, base_lead)["per_customer"]
 
 
-def delay_stats(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[str, float | None]) -> dict:
+def delay_stats(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[str, float | None], daily_lead=None) -> dict:
     """{avg_days, p90_days, per_customer}: avg and P90 are over every delivered unit in `daily_flows`.
 
     per_customer covers every demand node (retailers and customers); the key name is the API contract.
+    daily_lead: optional list (aligned with daily_flows) of {(u, v): lead factor} for weather slowdowns.
     """
     customers = demand_nodes(G)
-    samples = list(_customer_samples(G, daily_flows, base_lead))
+    samples = list(_customer_samples(G, daily_flows, base_lead, daily_lead))
     per_customer = {}
     for c in customers:
         rows = [(e, w) for cc, e, w in samples if cc == c]

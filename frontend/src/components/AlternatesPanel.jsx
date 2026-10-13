@@ -1,7 +1,6 @@
-import { ArrowRight, Boxes, Factory, Route, Truck } from 'lucide-react'
-import { useStore } from '../store.js'
+import { ArrowRight } from 'lucide-react'
 import { fmtNum, fmtPct, fmtSigned } from '../format.js'
-import { Badge, Card, CardBody, CardHeader, Table, Td, Th, Tr } from './ui/index.js'
+import { DataTable } from './ui/index.js'
 import { NodeTag } from './NodeTypeIcon.jsx'
 
 const ACTION_LABEL = {
@@ -11,159 +10,105 @@ const ACTION_LABEL = {
   hold: 'Hold (do not drain)',
 }
 
-function Section({ title, description, icon, count, children }) {
+function Path({ nodes }) {
   return (
-    <Card>
-      <CardHeader title={title} description={description} icon={icon} actions={<Badge>{count}</Badge>} />
-      <CardBody className={count ? 'px-0 pb-2' : ''}>{count ? children : <p className="text-sm text-fg-muted">None needed for this scenario.</p>}</CardBody>
-    </Card>
-  )
-}
-
-function Path({ nodes, muted }) {
-  return (
-    <span className={muted ? 'text-fg-muted line-through decoration-fg-muted/60' : 'text-fg'}>
+    <span className="inline-flex items-center">
       {nodes.map((n, i) => (
         <span key={`${n}-${i}`} className="inline-flex items-center">
           {i > 0 && <ArrowRight className="mx-0.5 h-3 w-3 text-fg-muted" aria-hidden />}
-          {muted ? <span>{n}</span> : <NodeTag id={n} showName={false} />}
+          <NodeTag id={n} showName={false} />
         </span>
       ))}
     </span>
   )
 }
 
-export default function AlternatesPanel() {
-  const { recover } = useStore()
-  if (!recover) return null
-  const sup = recover.alternate_suppliers ?? []
-  const routes = recover.alternate_routes ?? []
-  const inv = recover.inventory_actions ?? []
-  const prod = recover.production_actions ?? []
+const Reason = ({ text }) => (
+  <span className="block max-w-[22rem] truncate text-xs text-fg-muted" title={text}>
+    {text}
+  </span>
+)
 
+export function AlternateSuppliers({ rows }) {
   return (
-    <div className="grid gap-6 xl:grid-cols-2">
-      <Section title="Alternate suppliers" description="Ranked by cost, lead time and spare capacity" icon={Truck} count={sup.length}>
-        <Table label="Alternate suppliers">
-          <thead>
-            <tr>
-              <Th>Supplier</Th>
-              <Th numeric>Spare/day</Th>
-              <Th numeric>Lead</Th>
-              <Th numeric>Premium</Th>
-              <Th numeric>Reliability</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {sup.map((s) => (
-              <Tr key={`${s.replaces}-${s.supplier}`}>
-                <Td>
-                  <NodeTag id={s.supplier} size="sm" />
-                  <div className="mt-0.5 flex items-center gap-1 text-xs text-fg-muted">
-                    replaces <NodeTag id={s.replaces} showName={false} /> · {s.city}
-                  </div>
-                  {s.reason && <p className="mt-1 max-w-sm text-xs text-fg-2">{s.reason}</p>}
-                </Td>
-                <Td numeric>{fmtNum(s.spare_capacity)}</Td>
-                <Td numeric>{s.lead} d</Td>
-                <Td numeric>{fmtSigned(s.cost_premium_pct)}%</Td>
-                <Td numeric>{fmtPct(s.reliability)}</Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
-      </Section>
+    <DataTable
+      label="Alternate suppliers"
+      rows={rows}
+      rowKey={(s) => `${s.replaces}-${s.supplier}`}
+      empty="No alternate supplier is needed for this scenario."
+      columns={[
+        { key: 'supplier', header: 'Supplier', hideable: false, render: (s) => <NodeTag id={s.supplier} nameClassName="max-w-[11rem]" /> },
+        { key: 'replaces', header: 'Replaces', render: (s) => <NodeTag id={s.replaces} showName={false} /> },
+        { key: 'spare_capacity', header: 'Spare/day', align: 'right', render: (s) => fmtNum(s.spare_capacity) },
+        { key: 'lead', header: 'Lead', align: 'right', render: (s) => `${s.lead} d` },
+        { key: 'cost_premium_pct', header: 'Premium', align: 'right', render: (s) => `${fmtSigned(s.cost_premium_pct)}%` },
+        { key: 'reliability', header: 'Reliability', align: 'right', render: (s) => fmtPct(s.reliability) },
+        { key: 'reason', header: 'Why', sortable: false, render: (s) => <Reason text={s.reason} /> },
+      ]}
+    />
+  )
+}
 
-      <Section title="Alternate routes" description="Old path → new path, with the change in lead time and cost" icon={Route} count={routes.length}>
-        <Table label="Alternate routes">
-          <thead>
-            <tr>
-              <Th>Route</Th>
-              <Th numeric>Spare</Th>
-              <Th numeric>Δ lead</Th>
-              <Th numeric>Δ cost/unit</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {routes.map((r) => (
-              <Tr key={`${r.destination}:${r.via.join('>')}`}>
-                <Td>
-                  {r.old_via && (
-                    <div className="text-xs">
-                      <Path nodes={r.old_via} muted />
-                    </div>
-                  )}
-                  <div className="mt-0.5 text-sm">
-                    <Path nodes={r.via} />
-                  </div>
-                  <div className="mt-0.5 text-xs text-fg-muted">replaces {r.replaces}</div>
-                </Td>
-                <Td numeric>{fmtNum(r.spare_capacity)}</Td>
-                <Td numeric>{fmtSigned(r.extra_lead_days, 1)} d</Td>
-                <Td numeric>{fmtSigned(r.extra_cost_per_unit, 1, '₹')}</Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
-      </Section>
+export function AlternateRoutes({ rows }) {
+  return (
+    <DataTable
+      label="Alternate routes"
+      rows={rows}
+      rowKey={(r) => `${r.destination}:${r.via.join('>')}`}
+      empty="No rerouting is needed for this scenario."
+      columns={[
+        { key: 'via', header: 'New route', hideable: false, value: (r) => r.via.join(' '), render: (r) => <Path nodes={r.via} /> },
+        { key: 'replaces', header: 'Replaces', render: (r) => <span className="num text-xs text-fg-2">{r.replaces}</span> },
+        { key: 'spare_capacity', header: 'Spare', align: 'right', render: (r) => fmtNum(r.spare_capacity) },
+        { key: 'extra_lead_days', header: 'Δ lead', align: 'right', render: (r) => `${fmtSigned(r.extra_lead_days, 1)} d` },
+        { key: 'extra_cost_per_unit', header: 'Δ cost/unit', align: 'right', render: (r) => fmtSigned(r.extra_cost_per_unit, 1, '₹') },
+      ]}
+    />
+  )
+}
 
-      <Section title="Inventory actions" icon={Boxes} count={inv.length}>
-        <Table label="Inventory actions">
-          <thead>
-            <tr>
-              <Th>Day</Th>
-              <Th>Action</Th>
-              <Th numeric>Units</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {inv.map((a, i) => (
-              <Tr key={i}>
-                <Td className="tabular text-fg-muted">{a.day}</Td>
-                <Td>
-                  <div className="flex flex-wrap items-center gap-1 font-medium text-fg">
-                    {ACTION_LABEL[a.action] || a.action} at <NodeTag id={a.node} showName={false} />
-                    {a.source && (
-                      <span className="inline-flex items-center gap-1 font-normal text-fg-2">
-                        from <NodeTag id={a.source} showName={false} />
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-fg-muted">{a.reason}</p>
-                </Td>
-                <Td numeric>{fmtNum(a.units)}</Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
-      </Section>
+export function InventoryActions({ rows }) {
+  return (
+    <DataTable
+      label="Inventory actions"
+      rows={rows.map((a, i) => ({ ...a, id: i }))}
+      empty="No inventory moves are needed for this scenario."
+      defaultSort={{ key: 'day', dir: 'asc' }}
+      columns={[
+        { key: 'day', header: 'Day', align: 'right', width: 'w-14', render: (a) => a.day },
+        { key: 'action', header: 'Action', render: (a) => <span className="text-fg">{ACTION_LABEL[a.action] || a.action}</span> },
+        { key: 'node', header: 'At', render: (a) => <NodeTag id={a.node} showName={false} /> },
+        { key: 'source', header: 'From', render: (a) => (a.source ? <NodeTag id={a.source} showName={false} /> : <span className="text-fg-muted">–</span>) },
+        { key: 'units', header: 'Units', align: 'right', render: (a) => fmtNum(a.units) },
+        { key: 'reason', header: 'Why', sortable: false, render: (a) => <Reason text={a.reason} /> },
+      ]}
+    />
+  )
+}
 
-      <Section title="Production actions" icon={Factory} count={prod.length}>
-        <Table label="Production actions">
-          <thead>
-            <tr>
-              <Th>Day</Th>
-              <Th>Shift</Th>
-              <Th numeric>Units/day</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {prod.map((p, i) => (
-              <Tr key={i}>
-                <Td className="tabular text-fg-muted">{p.start_day}</Td>
-                <Td>
-                  <div className="flex flex-wrap items-center gap-1 font-medium text-fg">
-                    <NodeTag id={p.from_factory} showName={false} /> → <NodeTag id={p.to_factory} showName={false} />
-                    <span className="font-normal text-fg-2">for {p.duration} days</span>
-                  </div>
-                  <p className="text-xs text-fg-muted">{p.reason}</p>
-                </Td>
-                <Td numeric>{fmtNum(p.units_per_day)}</Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
-      </Section>
-    </div>
+export function ProductionActions({ rows }) {
+  return (
+    <DataTable
+      label="Production actions"
+      rows={rows.map((p, i) => ({ ...p, id: i }))}
+      empty="No production shift is needed for this scenario."
+      defaultSort={{ key: 'start_day', dir: 'asc' }}
+      columns={[
+        { key: 'start_day', header: 'Day', align: 'right', width: 'w-14', render: (p) => p.start_day },
+        {
+          key: 'shift', header: 'Shift', value: (p) => `${p.from_factory}${p.to_factory}`,
+          render: (p) => (
+            <span className="inline-flex items-center gap-1">
+              <NodeTag id={p.from_factory} showName={false} />
+              <ArrowRight className="h-3 w-3 text-fg-muted" aria-hidden />
+              <NodeTag id={p.to_factory} showName={false} />
+            </span>
+          ),
+        },
+        { key: 'units_per_day', header: 'Units/day', align: 'right', render: (p) => fmtNum(p.units_per_day) },
+        { key: 'duration', header: 'Days', align: 'right', render: (p) => p.duration },
+        { key: 'reason', header: 'Why', sortable: false, render: (p) => <Reason text={p.reason} /> },
+      ]}
+    />
   )
 }

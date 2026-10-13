@@ -11,7 +11,9 @@ const SCALE_X = 95 // px per degree of longitude (India is taller than wide, so 
 const SCALE_Y = 60
 const TIER_GAP_X = 190
 const ROW_GAP_Y = 70
-const SIZE = { supplier: 30, factory: 28, warehouse: 30, retailer: 27, customer: 23 }
+const FIT_PADDING = 48
+const MAX_FIT_ZOOM = 1.6 // a tiny network should not fill the canvas with one giant node
+const SIZE = { supplier: 38, factory: 36, warehouse: 38, retailer: 35, customer: 30 }
 const BADGE = { stressed: ' ⚠', down: ' ✕' }
 const ICONS = Object.fromEntries(NODE_KINDS.map((k) => [k, glyphDataUri(k)]))
 
@@ -31,7 +33,16 @@ function tierPositions(nodes) {
   return out
 }
 
-function buildElements(network, { statuses, utilization, disrupted, highlight, hiddenKinds, layout, dark }) {
+function fitCapped(cy) {
+  if (!cy || !cy.nodes().length) return
+  cy.fit(undefined, FIT_PADDING)
+  if (cy.zoom() > MAX_FIT_ZOOM) {
+    cy.zoom(MAX_FIT_ZOOM)
+    cy.center()
+  }
+}
+
+function buildElements(network, { statuses, utilization, disrupted, highlight, hiddenKinds, layout, dark, surface, outline }) {
   const visible = network.nodes.filter((n) => !hiddenKinds?.has(n.kind))
   const ids = new Set(visible.map((n) => n.id))
   const tiers = layout === 'tiers' ? tierPositions(visible) : null
@@ -55,7 +66,7 @@ function buildElements(network, { statuses, utilization, disrupted, highlight, h
         icon: ICONS[n.kind] || glyphDataUri(n.kind),
         size: SIZE[n.kind] || 24,
         iconY: n.kind === 'supplier' ? '64%' : '50%',
-        outline: dark && t.outlineDark ? t.outlineDark : dark ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.95)',
+        outline: dark && t.outlineDark ? t.outlineDark : dark ? outline : surface,
         glowOpacity: 0.05 + risk * 0.22,
         glowPad: 3 + risk * 10,
       },
@@ -93,9 +104,11 @@ function stylesheet(t) {
         height: 'data(size)',
         label: 'data(label)',
         'text-wrap': 'wrap',
-        'text-max-width': 110,
+        'text-max-width': 140,
         'font-family': 'Inter Variable, system-ui, sans-serif',
-        'font-size': 9,
+        'font-size': 11,
+        // label declutter: hidden while unreadably small; failed, highlighted and selected nodes keep a larger label
+        'min-zoomed-font-size': 8,
         'font-weight': 500,
         'line-height': 1.25,
         color: t.color.fg2,
@@ -110,7 +123,7 @@ function stylesheet(t) {
         'underlay-padding': 'data(glowPad)',
         'underlay-shape': 'ellipse',
         'transition-property': 'border-color, border-width, underlay-opacity',
-        'transition-duration': '200ms',
+        'transition-duration': '150ms',
       },
     },
     // status = ring + glow (never the fill)
@@ -123,21 +136,13 @@ function stylesheet(t) {
       selector: 'node.status-down',
       style: {
         'border-color': STATUS_COLORS.down.color, 'border-width': 4, 'underlay-color': STATUS_COLORS.down.color, 'underlay-opacity': 0.3,
-        'underlay-padding': 9, 'font-weight': 700, color: STATUS_COLORS.down.color,
+        'underlay-padding': 9, color: STATUS_COLORS.down.color,
       },
     },
-    {
-      selector: 'node.bottleneck',
-      style: { 'underlay-color': t.color.warn, 'underlay-opacity': 0.26, 'underlay-padding': 9 },
-    },
-    {
-      selector: 'node.highlight',
-      style: { 'underlay-color': t.color.accent, 'underlay-opacity': 0.28, 'underlay-padding': 12 },
-    },
-    {
-      selector: 'node:selected',
-      style: { 'overlay-color': t.color.accent, 'overlay-opacity': 0.18, 'overlay-padding': 7, 'overlay-shape': 'ellipse' },
-    },
+    { selector: 'node.bottleneck', style: { 'underlay-color': t.color.warn, 'underlay-opacity': 0.26, 'underlay-padding': 9 } },
+    { selector: 'node.status-down, node.status-stressed, node.highlight, node:selected', style: { 'font-size': 14 } },
+    { selector: 'node.highlight', style: { 'underlay-color': t.color.accent, 'underlay-opacity': 0.28, 'underlay-padding': 12 } },
+    { selector: 'node:selected', style: { 'overlay-color': t.color.accent, 'overlay-opacity': 0.18, 'overlay-padding': 7, 'overlay-shape': 'ellipse' } },
     { selector: 'node:active', style: { 'overlay-opacity': 0 } },
     {
       selector: 'edge',
@@ -152,28 +157,22 @@ function stylesheet(t) {
         'control-point-weights': 0.5,
         opacity: 0.42,
         'transition-property': 'line-color, opacity',
-        'transition-duration': '200ms',
+        'transition-duration': '150ms',
       },
     },
     {
       selector: 'edge.disrupted',
-      style: {
-        'line-color': t.color.bad,
-        'target-arrow-color': t.color.bad,
-        'line-style': 'dashed',
-        'line-dash-pattern': [6, 4],
-        opacity: 1,
-      },
+      style: { 'line-color': t.color.bad, 'target-arrow-color': t.color.bad, 'line-style': 'dashed', 'line-dash-pattern': [6, 4], opacity: 1 },
     },
   ]
 }
 
 /**
- * 2D Cytoscape network. Click a node to open the details drawer; hover for a quick tooltip.
- * hiddenKinds: Set of node kinds to hide (legend filter). layout: 'geo' (lat/lon) | 'tiers' (layered by tier).
+ * 2D Cytoscape network. Click a node to inspect it; hover for a compact card.
+ * hiddenKinds: Set of kinds hidden by the legend. layout: 'geo' (lat/lon) | 'tiers'. fitSignal: bump to re-fit.
  */
 export default function NetworkGraph({
-  network: override, statuses = null, utilization = null, disrupted = null, highlight = null, hiddenKinds = null, layout = 'geo',
+  network: override, statuses = null, utilization = null, disrupted = null, highlight = null, hiddenKinds = null, layout = 'geo', fitSignal = 0,
 }) {
   const store = useStore()
   const { tokens, theme } = useTheme()
@@ -183,15 +182,20 @@ export default function NetworkGraph({
   const [hover, setHover] = useState(null)
 
   const elements = useMemo(
-    () => (network ? buildElements(network, { statuses, utilization, disrupted, highlight, hiddenKinds, layout, dark: theme === 'dark' }) : []),
-    [network, statuses, utilization, disrupted, highlight, hiddenKinds, layout, theme],
+    () =>
+      network
+        ? buildElements(network, {
+            statuses, utilization, disrupted, highlight, hiddenKinds, layout, dark: theme === 'dark', surface: tokens.color.surface, outline: tokens.alpha('fg', 0.32),
+          })
+        : [],
+    [network, statuses, utilization, disrupted, highlight, hiddenKinds, layout, theme, tokens],
   )
   const styles = useMemo(() => stylesheet(tokens), [tokens])
-  const cyLayout = useMemo(() => ({ name: 'preset', fit: true, padding: 36 }), [])
+  const cyLayout = useMemo(() => ({ name: 'preset', fit: false }), [])
 
   useEffect(() => {
     const cy = cyRef.current
-    if (!cy) return
+    if (!cy) return undefined
     const onTap = (e) => selectNode(e.target.id())
     const onBg = (e) => e.target === cy && selectNode(null)
     const onOver = (e) => {
@@ -213,7 +217,7 @@ export default function NetworkGraph({
     }
   }, [selectNode, network])
 
-  // Keep Cytoscape's selection in step with the store (selection can come from tables, the 3D view or the drawer).
+  // Keep Cytoscape's selection in step with the store (selection can come from tables, 3D or the inspector).
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
@@ -223,17 +227,17 @@ export default function NetworkGraph({
     if (selectedNode) cy.$id(selectedNode).select()
   }, [selectedNode, elements])
 
-  // Re-frame when the layout or the set of visible nodes changes.
-  const frameKey = `${layout}|${elements.filter((e) => e.position).length}|${network?.nodes?.length ?? 0}`
+  // Fit when the layout or the set of visible nodes changes, and on request (F / Fit button).
+  const frameKey = `${layout}|${elements.filter((e) => e.position).length}|${network?.nodes?.length ?? 0}|${fitSignal}`
   useEffect(() => {
-    const cy = cyRef.current
-    if (cy && cy.nodes().length) cy.fit(undefined, 36)
+    const id = requestAnimationFrame(() => fitCapped(cyRef.current))
+    return () => cancelAnimationFrame(id)
   }, [frameKey])
 
   // Marching dashes on disrupted lanes.
   useEffect(() => {
     const cy = cyRef.current
-    if (!cy || prefersReducedMotion() || !disrupted?.edges.size) return
+    if (!cy || prefersReducedMotion() || !disrupted?.edges.size) return undefined
     let offset = 0
     const id = setInterval(() => {
       offset = (offset - 1) % 100
@@ -272,37 +276,39 @@ export default function NetworkGraph({
       {node && (
         <div
           role="tooltip"
-          className="pointer-events-none absolute z-10 w-56 -translate-x-1/2 -translate-y-full animate-fade-in rounded-lg border border-border bg-surface px-3 py-2 text-xs shadow-card"
+          className="pointer-events-none absolute z-20 w-56 -translate-x-1/2 -translate-y-full animate-fade-in rounded-md border border-border bg-surface px-2.5 py-2 text-xs shadow-float"
           style={{ left: hover.x, top: hover.y - 18 }}
         >
-          <div className="flex items-center gap-1.5 font-semibold text-fg">
+          <div className="flex items-center gap-1.5">
             <TypeIcon kind={node.kind} size="xs" />
-            <span className="truncate">
-              {node.id} · {node.name || node.city}
-            </span>
+            <span className="num text-fg">{node.id}</span>
+            <span className="truncate text-fg-2">{node.name || node.city}</span>
           </div>
-          <div className="mt-0.5 text-fg-muted">
+          <div className="mt-0.5 flex items-center gap-1.5 text-fg-muted">
             {typeOf(node.kind).label}
             {node.city && ` · ${node.city}`}
             {status && (
-              <span className="font-medium" style={{ color: STATUS_COLORS[status].color }}>
-                {' '}
-                · {STATUS[status].label}
+              <span className="ml-auto inline-flex items-center gap-1 text-fg-2">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[status].color }} aria-hidden />
+                {STATUS[status].label}
+                {sim && ` · d${day}`}
               </span>
             )}
           </div>
-          <div className="mt-1.5 grid grid-cols-3 gap-1 text-fg-2">
-            <span>
-              Stock <b className="tabular text-fg">{fmtNum(node.stock)}</b>
-            </span>
-            <span>
-              Util <b className="tabular text-fg">{leafDemand ? '-' : fmtPct(util)}</b>
-            </span>
-            <span>
-              Crit <b className="tabular text-fg">{node.risk == null ? 'n/a' : fmtPct(node.risk)}</b>
-            </span>
-          </div>
-          {sim && statuses && <div className="mt-1 text-fg-muted">Day {day}</div>}
+          <dl className="mt-1.5 grid grid-cols-3 gap-1">
+            <div>
+              <dt className="text-fg-muted">Stock</dt>
+              <dd className="num text-fg">{fmtNum(node.stock)}</dd>
+            </div>
+            <div>
+              <dt className="text-fg-muted">Util</dt>
+              <dd className="num text-fg">{leafDemand ? '–' : fmtPct(util)}</dd>
+            </div>
+            <div>
+              <dt className="text-fg-muted">Critical</dt>
+              <dd className="num text-fg">{node.risk == null ? 'n/a' : fmtPct(node.risk)}</dd>
+            </div>
+          </dl>
         </div>
       )}
     </div>

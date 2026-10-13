@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Crosshair, Maximize2, Minus, Plus } from 'lucide-react'
 import { glyphMarkup, typeOf } from '../../lib/nodeTypes.js'
 import { INDIAN_CITIES, INDIA_OUTLINE } from '../../lib/indianCities.js'
-import { Button, cn } from '../ui/index.js'
+import { IconButton, cn } from '../ui/index.js'
 
 const INDIA_BOUNDS = { minLon: 67.5, maxLon: 97.8, minLat: 6, maxLat: 37.2 }
 const K = 10 // SVG units per degree
@@ -47,7 +47,7 @@ function Marker({ node, selected, size = NODE_R * K }) {
  * Click a marker or lane to select it. In pick mode a click drops a location pin instead (onPick({lat, lon})).
  * Wheel zooms around the cursor, drag pans.
  */
-export default function BuilderMap({ nodes = [], edges = [], selection, onSelect, pickMode = false, onPick, pin, className }) {
+export default function BuilderMap({ nodes = [], edges = [], selection, onSelect, pickMode = false, onPick, pin, className, framed = true }) {
   const svgRef = useRef(null)
   const home = useMemo(() => fitBox(nodes), [nodes])
   const [view, setView] = useState(home)
@@ -124,7 +124,7 @@ export default function BuilderMap({ nodes = [], edges = [], selection, onSelect
   const r = NODE_R * K * Math.min(1.4, Math.max(0.55, view.w / home.w))
 
   return (
-    <div className={cn('relative overflow-hidden rounded-lg border border-border bg-map', className)}>
+    <div className={cn('relative overflow-hidden bg-map', framed && 'rounded-lg border border-border', className)}>
       <svg
         ref={svgRef}
         viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
@@ -215,14 +215,14 @@ export default function BuilderMap({ nodes = [], edges = [], selection, onSelect
         )}
       </svg>
       <div className="absolute right-2 top-2 flex flex-col gap-1">
-        <Button size="icon" variant="secondary" icon={Plus} aria-label="Zoom in" onClick={() => zoom(1 / 1.4)} />
-        <Button size="icon" variant="secondary" icon={Minus} aria-label="Zoom out" onClick={() => zoom(1.4)} />
-        <Button size="icon" variant="secondary" icon={Maximize2} aria-label="Fit map" onClick={() => setView(home)} />
+        <IconButton icon={Plus} label="Zoom in" variant="secondary" size="sm" tooltipSide="left" onClick={() => zoom(1 / 1.4)} />
+        <IconButton icon={Minus} label="Zoom out" variant="secondary" size="sm" tooltipSide="left" onClick={() => zoom(1.4)} />
+        <IconButton icon={Maximize2} label="Fit map" variant="secondary" size="sm" tooltipSide="left" onClick={() => setView(home)} />
       </div>
       {pickMode && (
         <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2 py-1 text-xs font-medium text-accent-fg shadow-card">
-            <Crosshair className="h-3.5 w-3.5" aria-hidden />
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-xs text-fg shadow-float">
+            <Crosshair className="h-3.5 w-3.5 text-accent" aria-hidden />
             Click the map to place the node
           </span>
         </div>

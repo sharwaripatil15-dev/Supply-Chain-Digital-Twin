@@ -66,8 +66,8 @@ def cache_scope(flag: bool) -> list:
 
 
 def check_events(events: list[Event], mock: bool) -> list[Event]:
-    """Validate against the graph the handler will actually use (mocks only know the demo network)."""
-    nodes, edges = node_index(demo_graph() if mock else get_graph())
+    """Validate against the graph the handler will actually use (mocks only know mock/demo_network.json)."""
+    nodes, edges = node_index(mock_demo_graph() if mock else get_graph())
     try:
         return validate_events(events, nodes, edges)
     except EventValidationError as exc:

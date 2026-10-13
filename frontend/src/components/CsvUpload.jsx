@@ -1,20 +1,23 @@
 import { useState } from 'react'
-import { CheckCircle2, CircleCheck, Download, FileSpreadsheet, TriangleAlert, Upload } from 'lucide-react'
+import { Upload } from 'lucide-react'
 import { useStore } from '../store.js'
-import { Badge, Button, Card, CardBody, CardHeader, InlineError, useToast } from './ui/index.js'
+import { Button, Checkbox, InlineError, Panel, PanelHeader, StatusDot, useToast } from './ui/index.js'
 
-function FilePick({ label, file, onChange }) {
+function FilePick({ id, label, file, onChange }) {
   return (
-    <label className="block">
-      <span className="label">{label}</span>
+    <div>
+      <label htmlFor={id} className="mb-1 block text-xs font-medium text-fg-2">
+        {label}
+      </label>
       <input
+        id={id}
         type="file"
         accept=".csv,text/csv"
         onChange={(e) => onChange(e.target.files?.[0] || null)}
-        className="mt-1.5 block w-full text-xs text-fg-2 file:mr-3 file:h-8 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:text-xs file:font-medium file:text-fg hover:file:bg-surface-2"
+        className="block w-full text-xs text-fg-2 file:mr-3 file:h-8 file:cursor-pointer file:rounded-md file:border file:border-solid file:border-border-strong file:bg-surface file:px-3 file:text-xs file:font-medium file:text-fg hover:file:bg-raised"
       />
-      {file && <span className="mt-1 block text-xs text-fg-muted">{(file.size / 1024).toFixed(1)} KB</span>}
-    </label>
+      {file && <span className="num mt-1 block text-2xs text-fg-muted">{(file.size / 1024).toFixed(1)} KB</span>}
+    </div>
   )
 }
 
@@ -29,77 +32,65 @@ export default function CsvUpload() {
   const submit = async () => {
     const res = await uploadCsv(nodes, edges, activate)
     if (res) {
-      toast(res.activated ? 'Uploaded network is now active' : 'Network uploaded for preview', {
+      toast(res.activated ? 'Uploaded network is active' : 'Network uploaded for preview', {
         description: `${res.summary.n_nodes} nodes · ${res.summary.n_edges} lanes${res.warnings.length ? ` · ${res.warnings.length} warning(s)` : ''}`,
       })
     }
   }
   const activateLoaded = async () => {
     const res = await setSource('csv')
-    if (res.ok) toast('Uploaded network is now active', { description: 'Every tab now uses it' })
+    if (res.ok) toast('Uploaded network is active', { description: 'Every page now uses it' })
   }
 
   return (
-    <Card>
-      <CardHeader
-        title="Load your network from CSV"
-        description="Upload nodes.csv and edges.csv; files are validated before anything changes."
-        icon={FileSpreadsheet}
-        actions={csvActive && <Badge tone="ok" dot>Active on every tab</Badge>}
-      />
-      <CardBody className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FilePick label="nodes.csv" file={nodes} onChange={setNodes} />
-          <FilePick label="edges.csv" file={edges} onChange={setEdges} />
+    <Panel className="max-w-4xl">
+      <PanelHeader title="Upload CSV" meta="nodes.csv + edges.csv, validated before anything changes" actions={csvActive && <StatusDot status="ok" label="Active" />} />
+      <div className="space-y-4 px-4 py-3">
+        <div className="grid max-w-3xl gap-4 sm:grid-cols-2">
+          <FilePick id="csv-nodes" label="nodes.csv" file={nodes} onChange={setNodes} />
+          <FilePick id="csv-edges" label="edges.csv" file={edges} onChange={setEdges} />
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
-          <Download className="h-3.5 w-3.5" aria-hidden />
-          Templates:
-          <a className="font-medium text-accent hover:underline" href="/samples/sample_nodes.csv" download>
+        <p className="text-xs text-fg-muted">
+          Templates:{' '}
+          <a className="text-fg underline underline-offset-2 hover:text-accent" href="/samples/sample_nodes.csv" download>
             sample_nodes.csv
           </a>
-          <a className="font-medium text-accent hover:underline" href="/samples/sample_edges.csv" download>
+          ,{' '}
+          <a className="text-fg underline underline-offset-2 hover:text-accent" href="/samples/sample_edges.csv" download>
             sample_edges.csv
           </a>
-          <span>· kind is one of supplier, factory, warehouse, retailer, customer</span>
-        </div>
-        <label className="flex items-start gap-2 text-xs text-fg-2">
-          <input type="checkbox" className="mt-0.5" checked={activate} onChange={(e) => setActivate(e.target.checked)} />
-          Use it as the active network (Twin, Simulate, Chaos Finder and Recover all switch to it). Unchecked = preview on the Twin tab only.
-        </label>
+          . <span className="num">kind</span> is supplier, factory, warehouse, retailer or customer.
+        </p>
+        <Checkbox checked={activate} onChange={(e) => setActivate(e.target.checked)} label="Make it the active network for every page (unchecked: preview on the Twin only)" />
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" icon={Upload} disabled={!nodes || !edges || loading.upload} onClick={submit}>
             {loading.upload ? 'Validating…' : activate ? 'Upload and activate' : 'Upload and preview'}
           </Button>
           {source?.csv_loaded && !csvActive && (
-            <Button icon={CheckCircle2} onClick={activateLoaded} disabled={loading.source}>
+            <Button onClick={activateLoaded} disabled={loading.source}>
               Activate the last upload
             </Button>
           )}
         </div>
         <InlineError message={errors.upload || errors.source} />
         {upload && (
-          <div className="space-y-2 rounded-lg border border-border bg-surface-2/50 p-3 text-xs">
-            <div className="flex items-start gap-2 text-fg">
-              <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-ok" aria-hidden />
-              <span>
-                Loaded {upload.summary.n_nodes} nodes and {upload.summary.n_edges} lanes (
-                {Object.entries(upload.summary.by_kind)
-                  .map(([k, v]) => `${v} ${k}`)
-                  .join(', ')}
-                ).
-              </span>
-              {upload.activated && <Badge tone="accent">Active</Badge>}
-            </div>
+          <div className="space-y-1.5 border-t border-border pt-3 text-xs">
+            <StatusDot
+              status="ok"
+              textClassName="text-fg"
+              label={`Loaded ${upload.summary.n_nodes} nodes and ${upload.summary.n_edges} lanes (${Object.entries(upload.summary.by_kind)
+                .map(([k, v]) => `${v} ${k}`)
+                .join(', ')})${upload.activated ? ', active' : ''}.`}
+            />
             {upload.warnings.map((w) => (
-              <div key={w} className="flex items-start gap-2 text-fg-2">
-                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" aria-hidden />
+              <p key={w} className="flex items-start gap-1.5 text-fg-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-warn" aria-hidden />
                 {w}
-              </div>
+              </p>
             ))}
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-1.5">
               <Button size="sm" onClick={() => setTab('twin')}>
-                {upload.activated ? 'Open the Twin' : 'Preview on Twin'}
+                {upload.activated ? 'Open the Twin' : 'Preview on the Twin'}
               </Button>
               <Button
                 size="sm"
@@ -114,7 +105,7 @@ export default function CsvUpload() {
             </div>
           </div>
         )}
-      </CardBody>
-    </Card>
+      </div>
+    </Panel>
   )
 }

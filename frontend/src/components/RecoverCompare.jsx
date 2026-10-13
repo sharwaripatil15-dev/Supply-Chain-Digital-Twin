@@ -1,192 +1,140 @@
-import { Fragment } from 'react'
-import { CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts'
-import { AlertTriangle, CircleCheck, CircleX, Coins, LifeBuoy, PiggyBank, ScatterChart as ScatterIcon, Star, TrendingDown } from 'lucide-react'
-import { useStore } from '../store.js'
+import { CartesianGrid, LabelList, ResponsiveContainer, Scatter, ScatterChart, Tooltip as ChartTip, XAxis, YAxis, ZAxis } from 'recharts'
+
+/** Direct point label: one line, UI font (Recharts' default label wraps word by word inside the point's box). */
+const pointLabel = (fill) =>
+  function PointLabel({ x, y, value }) {
+    if (!value || x == null || y == null) return null
+    return (
+      <text x={x + 12} y={y + 4} fill={fill} fontSize={11}>
+        {value}
+      </text>
+    )
+  }
+import { Info } from 'lucide-react'
 import { useTokens } from '../theme.jsx'
 import { fmtINR, fmtNum } from '../format.js'
-import { ChartTooltip, axisProps } from '../lib/chart.jsx'
-import { Badge, Card, CardBody, CardHeader, EmptyState, InlineError, SkeletonBlock, Stat, Table, Td, Th, Tr } from './ui/index.js'
+import { ChartTooltip, axisProps, gridProps } from '../lib/chart.jsx'
+import { Badge, DataTable, StatusDot, Tooltip } from './ui/index.js'
 
-function RoiStats({ roi }) {
+/** ROI as one sentence. */
+export function RoiLine({ roi }) {
   const ratio = roi.inaction_loss > 0 ? roi.inaction_loss / Math.max(roi.fix_cost, 1) : null
+  const v = (x) => <span className="num text-fg">{fmtINR(x)}</span>
+  if (roi.inaction_loss <= 0) return <p className="text-sm text-fg-2">Doing nothing loses no sales in this scenario, so no plan pays for itself.</p>
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <Stat label="Do nothing" icon={TrendingDown} value={fmtINR(roi.inaction_loss)} sub="Lost sales if no action is taken" />
-      <Stat label="Recommended fix" icon={Coins} value={fmtINR(roi.fix_cost)} sub="Plan cost + residual lost sales" />
-      <Stat
-        label="Net saving"
-        icon={PiggyBank}
-        emphasis
-        value={fmtINR(roi.net_saving)}
-        chip={<Badge tone={roi.net_saving >= 0 ? 'ok' : 'bad'} dot>{roi.net_saving >= 0 ? 'Act' : 'Not worth it'}</Badge>}
-        sub={ratio ? `Every ₹1 spent avoids ₹${ratio.toFixed(1)} of losses` : 'No inaction loss in this scenario'}
-      />
-    </div>
+    <p className="text-sm text-fg-2">
+      {roi.net_saving >= 0 ? (
+        <>
+          Acting saves {v(roi.net_saving)}.
+        </>
+      ) : (
+        <>
+          Acting costs {v(-roi.net_saving)} more than it saves.
+        </>
+      )}{' '}
+      Doing nothing loses {v(roi.inaction_loss)}; the recommended plan costs {v(roi.fix_cost)} including residual lost sales
+      {ratio ? (
+        <>
+          {' '}
+          (every ₹1 avoids <span className="num text-fg">₹{ratio.toFixed(1)}</span> of losses)
+        </>
+      ) : null}
+      .
+    </p>
   )
 }
 
-function StrategyTable({ strategies }) {
+/** Strategy comparison. Recommended row = small accent tag; failed safety checks = red note + info tooltip. */
+export function StrategyTable({ strategies, selected, onSelect }) {
   const cheapest = strategies.reduce((a, b) => (b.cost < a.cost ? b : a))
   return (
-    <Card>
-      <CardHeader title="Strategy comparison" description="Each strategy is optimised, then re-stress-tested by the fix-safety check" icon={LifeBuoy} />
-      <CardBody className="px-0 pb-2">
-        <Table label="Strategy comparison" className="max-h-[520px]">
-          <thead>
-            <tr>
-              <Th>Strategy</Th>
-              <Th numeric>Cost</Th>
-              <Th numeric>Unmet</Th>
-              <Th numeric>Recovery</Th>
-              <Th numeric>Delay</Th>
-              <Th numeric>CO₂ t</Th>
-              <Th numeric>Resilience</Th>
-              <Th>Safety</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {strategies.map((s) => (
-              <Fragment key={s.name}>
-                <Tr selected={s.recommended}>
-                  <Td>
-                    <div className="flex flex-wrap items-center gap-1.5 font-medium text-fg">
-                      {s.name}
-                      {s.recommended && (
-                        <Badge tone="accent" icon={Star}>
-                          Recommended
-                        </Badge>
-                      )}
-                      {s === cheapest && <Badge>Cheapest</Badge>}
-                    </div>
-                    {s.description && <p className="mt-0.5 max-w-md text-xs text-fg-muted">{s.description}</p>}
-                  </Td>
-                  <Td numeric>{fmtINR(s.cost)}</Td>
-                  <Td numeric>{fmtNum(s.unmet)}</Td>
-                  <Td numeric>{s.recovery_days} d</Td>
-                  <Td numeric>{fmtNum(s.delay_avg_days, 1)} d</Td>
-                  <Td numeric>{fmtNum(s.co2, 1)}</Td>
-                  <Td numeric>{fmtNum(s.resilience_after, 0)}</Td>
-                  <Td>
-                    {s.safety_check.passed ? (
-                      <Badge tone="ok" icon={CircleCheck}>
-                        Pass
-                      </Badge>
-                    ) : (
-                      <Badge tone="bad" icon={CircleX}>
-                        Fail
-                      </Badge>
-                    )}
-                  </Td>
-                </Tr>
-                {!s.safety_check.passed && s.safety_check.warning && (
-                  <tr>
-                    <td colSpan={8} className="border-b border-border/70 px-5 pb-3 pt-0">
-                      <div className="flex items-start gap-2 rounded-md bg-bad/5 px-3 py-2 text-xs text-bad">
-                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                        <span>
-                          <b className="font-semibold">Fix-safety check failed.</b> {s.safety_check.warning}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-          </tbody>
-        </Table>
-      </CardBody>
-    </Card>
-  )
-}
-
-function CostScatter({ strategies }) {
-  const t = useTokens()
-  const series = [
-    { key: 'other', data: strategies.filter((s) => !s.recommended && s.safety_check.passed), fill: t.alpha('fgMuted', 0.55), shape: 'circle', label: 'Passes safety check' },
-    { key: 'unsafe', data: strategies.filter((s) => !s.recommended && !s.safety_check.passed), fill: t.color.bad, shape: 'cross', label: 'Fails safety check' },
-    { key: 'rec', data: strategies.filter((s) => s.recommended), fill: t.color.accent, shape: 'star', label: 'Recommended' },
-  ].filter((s) => s.data.length)
-  const rec = strategies.find((s) => s.recommended)
-  return (
-    <Card className="h-full">
-      <CardHeader title="Cost vs unmet demand" description="Lower-left is better" icon={ScatterIcon} />
-      <CardBody>
-        <ResponsiveContainer width="100%" height={280}>
-          <ScatterChart margin={{ top: 8, right: 12, bottom: 4, left: -4 }}>
-            <CartesianGrid stroke={t.color.border} strokeDasharray="2 4" />
-            <XAxis type="number" dataKey="cost" name="Cost" tickFormatter={fmtINR} {...axisProps(t)} />
-            <YAxis type="number" dataKey="unmet" name="Unmet" tickFormatter={(v) => fmtNum(v)} {...axisProps(t)} axisLine={false} />
-            <ZAxis range={[90, 90]} />
-            <Tooltip
-              cursor={{ stroke: t.color.border }}
-              content={
-                <ChartTooltip
-                  render={(s) => (
-                    <>
-                      <div className="font-medium text-fg">{s.name}</div>
-                      <div className="tabular text-fg-muted">
-                        {fmtINR(s.cost)} · {fmtNum(s.unmet)} units unmet
-                      </div>
-                    </>
-                  )}
-                />
-              }
-            />
-            {series.map((s) => (
-              <Scatter key={s.key} name={s.label} data={s.data} fill={s.fill} shape={s.shape} isAnimationActive={false} />
-            ))}
-          </ScatterChart>
-        </ResponsiveContainer>
-        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted">
-          {series.map((s) => (
-            <li key={s.key} className="flex items-center gap-1.5">
-              <span className={s.key === 'rec' ? 'text-accent' : s.key === 'unsafe' ? 'text-bad' : 'text-fg-muted'} aria-hidden>
-                {s.key === 'rec' ? '★' : s.key === 'unsafe' ? '✕' : '●'}
+    <DataTable
+      label="Strategy comparison"
+      rows={strategies}
+      rowKey={(s) => s.name}
+      selectedKey={selected}
+      onRowClick={(s) => onSelect(s.name)}
+      toolbar={<h2 className="text-sm font-medium text-fg">Strategies</h2>}
+      columns={[
+        {
+          key: 'name', header: 'Strategy', hideable: false,
+          render: (s) => (
+            <span className="flex items-center gap-1.5">
+              <span className="max-w-[9rem] truncate text-fg min-[1400px]:max-w-[16rem] 2xl:max-w-[22rem]" title={s.name}>
+                {s.name}
               </span>
-              {s.label}
-            </li>
-          ))}
-        </ul>
-        {rec && (
-          <p className="mt-3 text-xs text-fg-2">
-            <b className="font-medium text-fg">{rec.name}</b> has the lowest cost plus lost sales among strategies that pass the fix-safety check.
-          </p>
-        )}
-      </CardBody>
-    </Card>
+              {s.recommended && <Badge tone="accent">Recommended</Badge>}
+              {s === cheapest && !s.recommended && <Badge>Cheapest</Badge>}
+            </span>
+          ),
+        },
+        { key: 'cost', header: 'Cost', align: 'right', render: (s) => fmtINR(s.cost) },
+        { key: 'unmet', header: 'Unmet', align: 'right', render: (s) => fmtNum(s.unmet) },
+        { key: 'recovery_days', header: 'Recovers', align: 'right', render: (s) => `${s.recovery_days} d` },
+        { key: 'delay_avg_days', header: 'Delay', align: 'right', render: (s) => `${fmtNum(s.delay_avg_days, 1)} d` },
+        { key: 'co2', header: 'CO₂ t', align: 'right', defaultHidden: true, render: (s) => fmtNum(s.co2, 1) },
+        { key: 'resilience_after', header: 'Resilience', align: 'right', render: (s) => fmtNum(s.resilience_after, 0) },
+        {
+          key: 'safety', header: 'Safety', value: (s) => (s.safety_check.passed ? 1 : 0),
+          render: (s) =>
+            s.safety_check.passed ? (
+              <StatusDot status="ok" label="Pass" />
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs text-bad">
+                Fails
+                <Tooltip content={s.safety_check.warning} wide side="left">
+                  <button type="button" aria-label={`Why ${s.name} fails the safety check`} className="rounded-sm text-bad" onClick={(e) => e.stopPropagation()}>
+                    <Info className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </Tooltip>
+              </span>
+            ),
+        },
+      ]}
+    />
   )
 }
 
-export default function RecoverCompare() {
-  const { recover, loading, errors, events, runRecover } = useStore()
-  if (loading.recover) {
-    return (
-      <Card>
-        <CardBody>
-          <SkeletonBlock lines={6} label="Optimising recovery strategies" />
-        </CardBody>
-      </Card>
-    )
-  }
-  if (errors.recover) return <InlineError message={errors.recover} onRetry={() => runRecover(events)} />
-  if (!recover) {
-    return (
-      <Card>
-        <EmptyState icon={LifeBuoy} title="No recovery plan yet" description="Build a scenario on the Simulate page, then compute a plan." />
-      </Card>
-    )
-  }
+/** Cost vs unmet scatter with direct labels on the points that matter (no legend). */
+export function CostScatter({ strategies }) {
+  const t = useTokens()
+  const rows = strategies.map((s) => ({ ...s, tag: s.recommended ? 'Recommended' : !s.safety_check.passed ? 'Fails safety check' : '' }))
+  const groups = [
+    { key: 'other', data: rows.filter((s) => !s.recommended && s.safety_check.passed), fill: t.alpha('fgMuted', 0.55) },
+    { key: 'unsafe', data: rows.filter((s) => !s.recommended && !s.safety_check.passed), fill: t.color.bad },
+    { key: 'rec', data: rows.filter((s) => s.recommended), fill: t.color.accent },
+  ].filter((g) => g.data.length)
   return (
-    <div className="space-y-6">
-      <RoiStats roi={recover.roi} />
-      <div className="grid gap-6 2xl:grid-cols-5">
-        <div className="2xl:col-span-3">
-          <StrategyTable strategies={recover.strategies} />
-        </div>
-        <div className="2xl:col-span-2">
-          <CostScatter strategies={recover.strategies} />
-        </div>
-      </div>
+    <div>
+      <p className="mb-1 text-xs text-fg-muted">Lower-left is better. Labels mark the recommended plan and plans that fail the safety check.</p>
+      <ResponsiveContainer width="100%" height={300}>
+        <ScatterChart margin={{ top: 16, right: 24, bottom: 4, left: 0 }}>
+          <CartesianGrid {...gridProps(t)} />
+          <XAxis type="number" dataKey="cost" name="Cost" tickFormatter={fmtINR} {...axisProps(t)} />
+          <YAxis type="number" dataKey="unmet" name="Unmet" tickFormatter={(v) => fmtNum(v)} {...axisProps(t)} />
+          <ZAxis range={[70, 70]} />
+          <ChartTip
+            cursor={{ stroke: t.color.border }}
+            content={
+              <ChartTooltip
+                render={(s) => (
+                  <>
+                    <div className="text-fg">{s.name}</div>
+                    <div className="num text-fg-muted">
+                      {fmtINR(s.cost)} · {fmtNum(s.unmet)} units unmet
+                    </div>
+                  </>
+                )}
+              />
+            }
+          />
+          {groups.map((g) => (
+            <Scatter key={g.key} data={g.data} fill={g.fill} isAnimationActive={false}>
+              {g.key !== 'other' && <LabelList dataKey="tag" content={pointLabel(g.fill)} />}
+            </Scatter>
+          ))}
+        </ScatterChart>
+      </ResponsiveContainer>
     </div>
   )
 }

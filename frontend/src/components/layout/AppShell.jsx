@@ -1,145 +1,180 @@
-import { useEffect, useState } from 'react'
-import {
-  Activity,
-  Database,
-  LifeBuoy,
-  Moon,
-  Network,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Radar,
-  ShieldCheck,
-  Sun,
-} from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Activity, CircleHelp, Database, ExternalLink, Keyboard, LifeBuoy, Moon, Network, PanelLeft, PanelRight, Radar, Search, ShieldCheck, Sun } from 'lucide-react'
 import { SOURCE_LABEL, useStore } from '../../store.js'
 import { useTheme } from '../../theme.jsx'
 import { API_URL } from '../../api.js'
 import { eventLabel } from '../../format.js'
-import { Badge, Button, Tooltip, cn } from '../ui/index.js'
-import NodeDrawer from '../NodeDrawer.jsx'
+import { MOD_LABEL, useHotkeys, useMediaQuery, useUi } from '../../ui.jsx'
+import { Divider, IconButton, Kbd, Menu, StatusDot, Tooltip, cn } from '../ui/index.js'
+import CommandPalette from './CommandPalette.jsx'
+import ShortcutsDialog from './ShortcutsDialog.jsx'
 
 export const PAGES = [
-  { id: 'twin', label: 'Twin', icon: Network, title: 'Digital twin' },
-  { id: 'simulate', label: 'Simulate', icon: Activity, title: 'Disruption simulator' },
-  { id: 'chaos', label: 'Chaos Finder', icon: Radar, title: 'Chaos Finder' },
-  { id: 'recover', label: 'Recover', icon: LifeBuoy, title: 'Recovery planner' },
-  { id: 'data', label: 'Data', icon: Database, title: 'Data & models' },
+  { id: 'twin', label: 'Twin', icon: Network, title: 'Digital twin', key: '1', inspector: true },
+  { id: 'simulate', label: 'Simulate', icon: Activity, title: 'Simulate', key: '2', inspector: true },
+  { id: 'chaos', label: 'Chaos Finder', icon: Radar, title: 'Chaos Finder', key: '3', inspector: true },
+  { id: 'recover', label: 'Recover', icon: LifeBuoy, title: 'Recover', key: '4', inspector: true },
+  { id: 'data', label: 'Data', icon: Database, title: 'Data', key: '5', inspector: false },
 ]
 
-function useCollapsedSidebar() {
-  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth < 1024)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1023px)')
-    const onChange = (e) => setCollapsed(e.matches)
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
-  }, [])
-  return [collapsed, setCollapsed]
-}
-
-function Sidebar({ collapsed, onToggle }) {
+function Rail() {
   const { tab, setTab } = useStore()
+  const { railPinned, setPref } = useUi()
+  const [hover, setHover] = useState(false)
+  const timer = useRef(null)
+  const expanded = railPinned || hover
   return (
-    <nav
-      aria-label="Main"
-      className={cn(
-        'sticky top-0 flex h-screen shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200',
-        collapsed ? 'w-16' : 'w-[220px]',
-      )}
-    >
-      <div className={cn('flex h-14 items-center gap-2.5 px-4', collapsed && 'justify-center px-0')}>
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-accent-fg">
-          <ShieldCheck className="h-4 w-4" aria-hidden />
-        </span>
-        {!collapsed && (
-          <div className="leading-tight">
-            <div className="text-sm font-semibold tracking-wide text-fg">AEGIS</div>
-            <div className="text-xs text-fg-muted">Supply chain twin</div>
-          </div>
+    <div className={cn('relative z-40 h-full shrink-0 transition-[width] duration-150', railPinned ? 'w-52' : 'w-14')}>
+      <nav
+        aria-label="Main"
+        onMouseEnter={() => {
+          clearTimeout(timer.current)
+          timer.current = setTimeout(() => setHover(true), 250)
+        }}
+        onMouseLeave={() => {
+          clearTimeout(timer.current)
+          setHover(false)
+        }}
+        className={cn(
+          'absolute inset-y-0 left-0 flex flex-col border-r border-border bg-surface transition-[width] duration-150',
+          expanded ? 'w-52' : 'w-14',
+          expanded && !railPinned && 'shadow-float',
         )}
-      </div>
-      <ul className="mt-2 flex-1 space-y-0.5 px-2">
-        {PAGES.map((p) => {
-          const active = tab === p.id
-          const Icon = p.icon
-          const item = (
+      >
+        <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border px-4">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-fg text-bg">
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+          </span>
+          <span className={cn('text-sm font-semibold tracking-wide text-fg transition-opacity duration-150', expanded ? 'visible opacity-100' : 'invisible opacity-0')}>AEGIS</span>
+        </div>
+        <ul className="flex-1 space-y-0.5 p-2">
+          {PAGES.map((p) => {
+            const active = tab === p.id
+            const Icon = p.icon
+            return (
+              <li key={p.id}>
+                <Tooltip content={expanded ? null : p.label} shortcut={p.key} side="right" className="w-full">
+                  <button
+                    type="button"
+                    onClick={() => setTab(p.id)}
+                    aria-current={active ? 'page' : undefined}
+                    aria-label={p.label}
+                    aria-keyshortcuts={p.key}
+                    className={cn(
+                      'relative flex h-8 w-full items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150',
+                      active ? 'bg-raised text-fg' : 'text-fg-2 hover:bg-raised hover:text-fg',
+                    )}
+                  >
+                    {active && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-accent" aria-hidden />}
+                    <Icon className={cn('h-4 w-4 shrink-0', active && 'text-accent')} aria-hidden />
+                    <span className={cn('flex-1 whitespace-nowrap text-left transition-opacity duration-150', expanded ? 'visible opacity-100' : 'invisible opacity-0')}>{p.label}</span>
+                    {expanded && <Kbd>{p.key}</Kbd>}
+                  </button>
+                </Tooltip>
+              </li>
+            )
+          })}
+        </ul>
+        <div className="border-t border-border p-2">
+          <Tooltip content={expanded && !railPinned ? null : railPinned ? 'Unpin sidebar' : 'Pin sidebar'} shortcut="[" side="right" className="w-full">
             <button
               type="button"
-              onClick={() => setTab(p.id)}
-              aria-current={active ? 'page' : undefined}
-              aria-label={collapsed ? p.label : undefined}
-              className={cn(
-                'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-colors duration-150',
-                collapsed && 'justify-center px-0',
-                active ? 'bg-accent/10 text-accent' : 'text-fg-2 hover:bg-surface-2 hover:text-fg',
-              )}
+              onClick={() => setPref('railPinned', (v) => !v)}
+              aria-pressed={railPinned}
+              aria-label={railPinned ? 'Unpin sidebar' : 'Pin sidebar'}
+              className="flex h-8 w-full items-center gap-3 rounded-md px-3 text-sm text-fg-2 transition-colors duration-150 hover:bg-raised hover:text-fg"
             >
-              <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
-              {!collapsed && p.label}
+              <PanelLeft className="h-4 w-4 shrink-0" aria-hidden />
+              <span className={cn('whitespace-nowrap transition-opacity duration-150', expanded ? 'visible opacity-100' : 'invisible opacity-0')}>{railPinned ? 'Unpin' : 'Pin'} sidebar</span>
             </button>
-          )
-          return (
-            <li key={p.id}>
-              {collapsed ? (
-                <Tooltip content={p.label} className="w-full">
-                  {item}
-                </Tooltip>
-              ) : (
-                item
-              )}
-            </li>
-          )
-        })}
-      </ul>
-      <div className={cn('border-t border-border p-2', collapsed && 'flex justify-center')}>
-        {!collapsed && <p className="truncate px-2 pb-2 text-xs text-fg-muted" title={API_URL}>API · {API_URL.replace(/^https?:\/\//, '')}</p>}
-        <Button
-          variant="ghost"
-          size={collapsed ? 'icon' : 'sm'}
-          icon={collapsed ? PanelLeftOpen : PanelLeftClose}
-          onClick={onToggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={collapsed ? '' : 'w-full'}
-        >
-          {!collapsed && 'Collapse'}
-        </Button>
-      </div>
-    </nav>
+          </Tooltip>
+        </div>
+      </nav>
+    </div>
+  )
+}
+
+function StatusButton({ label, children, onClick, title }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className="flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-150 hover:bg-raised"
+    >
+      <span className="hidden text-fg-muted xl:inline">{label}</span>
+      {children}
+    </button>
   )
 }
 
 function TopBar() {
-  const { tab, events, sim, network, chaos, source, setTab } = useStore()
+  const { tab, events, sim, day, network, chaos, source, setTab } = useStore()
   const { theme, toggle } = useTheme()
+  const ui = useUi()
+  const docked = useMediaQuery('(min-width: 1280px)')
   const page = PAGES.find((p) => p.id === tab)
   const resilience = chaos?.resilience_score ?? network?.resilience_score
-  const scenario = events.length ? `${eventLabel(events[0])}${events.length > 1 ? ` +${events.length - 1}` : ''}` : 'No scenario'
+  const scenario = events.length ? `${eventLabel(events[0])}${events.length > 1 ? ` +${events.length - 1}` : ''}` : 'None'
+  const last = sim ? sim.timeline.length - 1 : 0
+  const inspectorShown = docked ? ui.inspectorOpen : ui.overlayOpen
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-bg/85 px-6 backdrop-blur">
-      <h1 className="text-sm font-semibold text-fg">{page?.title}</h1>
-      <div className="ml-auto flex items-center gap-2">
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface pl-4 pr-2">
+      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-sm">
+        <span className="text-fg-muted">AEGIS</span>
+        <span className="text-fg-muted" aria-hidden>
+          /
+        </span>
+        <h1 className="truncate text-sm font-semibold text-fg">{page?.title}</h1>
+      </nav>
+      <div className="ml-auto flex min-w-0 items-center gap-1">
         {source && (
-          <button type="button" onClick={() => setTab('data')} className="rounded-md" title="Active network source: change it on the Data tab">
-            <Badge tone={source.runnable ? 'accent' : 'warn'} icon={Database} className="cursor-pointer hover:brightness-95">
-              {SOURCE_LABEL[source.source]}
-              {!source.runnable && ' · needs fixes'}
-            </Badge>
-          </button>
+          <StatusButton label="Network" onClick={() => setTab('data')} title="Active network (change it on the Data page)">
+            <StatusDot status={source.runnable ? 'ok' : 'warn'} label={`${SOURCE_LABEL[source.source]}${source.source === 'preset' ? '' : ` · v${source.version}`}${source.runnable ? '' : ' · needs fixes'}`} textClassName="text-fg" />
+          </StatusButton>
         )}
-        <Badge tone={sim ? 'accent' : 'neutral'} dot title="Active scenario" className="hidden max-w-[260px] truncate md:inline-flex">
-          {scenario}
-        </Badge>
-        {resilience != null && (
-          <Badge tone={resilience >= 70 ? 'ok' : resilience >= 40 ? 'warn' : 'bad'} title="Resilience score (Chaos Finder)">
-            Resilience <span className="tabular">{resilience.toFixed(1)}</span>
-          </Badge>
+        <Divider />
+        <StatusButton label="Scenario" onClick={() => setTab('simulate')} title="Current scenario">
+          <span className="max-w-[180px] truncate text-fg">{scenario}</span>
+          {sim && <span className="num text-fg-muted">d{day}/{last}</span>}
+        </StatusButton>
+        <Divider />
+        <span className="flex h-8 items-center gap-1.5 whitespace-nowrap px-2 text-xs text-fg-muted" title="Resilience score from Chaos Finder (0-100)">
+          Resilience <span className="num text-fg">{resilience != null ? resilience.toFixed(1) : '–'}</span>
+        </span>
+        <Divider />
+        <button
+          type="button"
+          onClick={() => ui.setPaletteOpen(true)}
+          className="ml-1 flex h-8 items-center gap-2 rounded-md border border-border px-2 text-xs text-fg-muted transition-colors duration-150 hover:bg-raised hover:text-fg"
+          aria-label="Open command palette"
+          aria-keyshortcuts="Control+K Meta+K"
+        >
+          <Search className="h-3.5 w-3.5" aria-hidden />
+          <span className="hidden lg:inline">Search</span>
+          <Kbd>{MOD_LABEL} K</Kbd>
+        </button>
+        {page?.inspector && (
+          <IconButton
+            icon={PanelRight}
+            label={inspectorShown ? 'Hide inspector' : 'Show inspector'}
+            shortcut="I"
+            pressed={inspectorShown}
+            onClick={() => (docked ? ui.setPref('inspectorOpen', (v) => !v) : ui.setOverlayOpen((v) => !v))}
+          />
         )}
-        <Button
+        <IconButton icon={theme === 'dark' ? Sun : Moon} label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggle} />
+        <Menu
+          icon={CircleHelp}
+          iconOnly
+          label="Help"
+          triggerLabel="Help"
           variant="ghost"
-          size="icon"
-          icon={theme === 'dark' ? Sun : Moon}
-          onClick={toggle}
-          aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          size="md"
+          items={[
+            { key: 'keys', label: 'Keyboard shortcuts', icon: Keyboard, shortcut: '?', onSelect: () => ui.setShortcutsOpen(true) },
+            { key: 'api', label: 'API reference', icon: ExternalLink, onSelect: () => window.open(`${API_URL}/docs`, '_blank', 'noopener') },
+          ]}
         />
       </div>
     </header>
@@ -147,15 +182,47 @@ function TopBar() {
 }
 
 export default function AppShell({ children }) {
-  const [collapsed, setCollapsed] = useCollapsedSidebar()
+  const store = useStore()
+  const ui = useUi()
+  const docked = useMediaQuery('(min-width: 1280px)')
+  const page = PAGES.find((p) => p.id === store.tab)
+
+  useHotkeys({
+    'mod+k': { handler: () => ui.setPaletteOpen((v) => !v), allowInInputs: true },
+    ...Object.fromEntries(PAGES.map((p) => [p.key, () => store.setTab(p.id)])),
+    '[': () => ui.setPref('railPinned', (v) => !v),
+    i: () => {
+      if (!page?.inspector) return false
+      if (docked) ui.setPref('inspectorOpen', (v) => !v)
+      else ui.setOverlayOpen((v) => !v)
+    },
+    '?': () => ui.setShortcutsOpen(true),
+    f: () => ui.requestFit(),
+    space: () => {
+      if (store.tab !== 'simulate' || !store.sim) return false
+      ui.togglePlay()
+    },
+    escape: () => {
+      if (ui.story) return ui.stopStory()
+      if (!store.selectedNode) return false
+      store.selectNode(null)
+    },
+  })
+
   return (
-    <div className="flex min-h-screen bg-bg">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+    <div className="flex h-screen overflow-hidden bg-bg text-fg">
+      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2">
+        Skip to content
+      </a>
+      <Rail />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
-        <main className="mx-auto w-full max-w-[1440px] flex-1 px-6 py-6">{children}</main>
+        <main id="main" className="min-h-0 flex-1 overflow-auto">
+          {children}
+        </main>
       </div>
-      <NodeDrawer />
+      <CommandPalette />
+      <ShortcutsDialog />
     </div>
   )
 }

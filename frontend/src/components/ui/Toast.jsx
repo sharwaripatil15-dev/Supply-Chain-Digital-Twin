@@ -1,12 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { cn } from './cn.js'
 
 const ToastContext = createContext(null)
-const ICONS = { success: CheckCircle2, error: AlertCircle, info: Info }
-const TONE = { success: 'text-ok', error: 'text-bad', info: 'text-accent' }
+const DOT = { success: 'bg-ok', error: 'bg-bad', info: 'bg-accent' }
 
-/** Lightweight toasts for completed actions. Announced politely; auto-dismiss after 4 s. */
+/** Small, dismissible toasts, bottom-right. Announced politely; auto-dismiss after 4 s. */
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
   const nextId = useRef(1)
@@ -14,7 +13,7 @@ export function ToastProvider({ children }) {
   const toast = useCallback(
     (title, { tone = 'success', description } = {}) => {
       const id = nextId.current++
-      setToasts((t) => [...t.slice(-3), { id, title, tone, description }])
+      setToasts((t) => [...t.slice(-2), { id, title, tone, description }])
       setTimeout(() => dismiss(id), 4000)
     },
     [dismiss],
@@ -24,25 +23,22 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={value}>
       {children}
       <div aria-live="polite" className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2">
-        {toasts.map((t) => {
-          const Icon = ICONS[t.tone]
-          return (
-            <div
-              key={t.id}
-              role="status"
-              className="pointer-events-auto flex animate-slide-in items-start gap-2.5 rounded-card border border-border bg-surface p-3 shadow-card"
-            >
-              <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', TONE[t.tone])} aria-hidden />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-fg">{t.title}</p>
-                {t.description && <p className="mt-0.5 text-xs text-fg-muted">{t.description}</p>}
-              </div>
-              <button type="button" onClick={() => dismiss(t.id)} className="text-fg-muted hover:text-fg" aria-label="Dismiss notification">
-                <X className="h-4 w-4" aria-hidden />
-              </button>
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            role="status"
+            className="pointer-events-auto flex animate-rise-in items-start gap-2.5 rounded-lg border border-border bg-surface px-3 py-2.5 shadow-float"
+          >
+            <span className={cn('mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full', DOT[t.tone] || DOT.info)} aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-fg">{t.title}</p>
+              {t.description && <p className="mt-0.5 text-xs text-fg-muted">{t.description}</p>}
             </div>
-          )
-        })}
+            <button type="button" onClick={() => dismiss(t.id)} className="-mr-1 rounded-sm p-0.5 text-fg-muted hover:text-fg" aria-label="Dismiss notification">
+              <X className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </div>
+        ))}
       </div>
     </ToastContext.Provider>
   )

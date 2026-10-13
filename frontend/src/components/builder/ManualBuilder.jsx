@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  CheckCircle2, Copy, Download, Eraser, FileJson, FileSpreadsheet, Plus, Redo2, RotateCcw, Route, Search, Trash2, Undo2, Upload, Wand2,
-} from 'lucide-react'
+import { CheckCircle2, Copy, Eraser, FileJson, FileSpreadsheet, MoreHorizontal, Plus, Redo2, RotateCcw, Route, Trash2, Undo2, Upload } from 'lucide-react'
 import { api, errorMessage } from '../../api.js'
 import { useStore } from '../../store.js'
 import { fmtNum } from '../../format.js'
 import { NODE_KINDS, isDemand, typeOf } from '../../lib/nodeTypes.js'
 import { duplicateNode } from '../../lib/nodeForm.js'
 import { downloadText, readFileText } from '../../lib/download.js'
-import { Badge, Button, Card, CardBody, ConfirmDialog, EmptyState, InlineError, SegmentedControl, Skeleton, Table, Td, Th, Tr, cn, useToast } from '../ui/index.js'
-import { NodeTag, TypeIcon } from '../NodeTypeIcon.jsx'
+import { MOD_LABEL, useHotkeys } from '../../ui.jsx'
+import {
+  Button, ConfirmDialog, DataTable, Divider, EmptyState, IconButton, InlineError, Input, Menu, Panel, PanelHeader, Select, Skeleton,
+  StatusDot, TabPanel, Tabs, useToast,
+} from '../ui/index.js'
+import { NodeTag } from '../NodeTypeIcon.jsx'
 import BuilderMap from './BuilderMap.jsx'
 import NodeForm, { TypePicker } from './NodeForm.jsx'
 import EdgeForm from './EdgeForm.jsx'
@@ -17,114 +19,9 @@ import ValidationPanel from './ValidationPanel.jsx'
 
 const lanesOf = (edges, ids) => edges.filter((e) => ids.includes(e.source) || ids.includes(e.target))
 
-function Toolbar({ children }) {
-  return <div className="flex flex-wrap items-center gap-1.5">{children}</div>
-}
-
-function Divider() {
-  return <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-}
-
-function NodeTable({ nodes, selection, checked, onCheck, onCheckAll, onOpen, onDuplicate, onDelete }) {
-  const allChecked = nodes.length > 0 && nodes.every((n) => checked.has(n.id))
-  return (
-    <Table label="Nodes" className="max-h-[440px]">
-      <thead>
-        <tr>
-          <Th className="w-8">
-            <input type="checkbox" aria-label="Select all nodes" checked={allChecked} onChange={(e) => onCheckAll(e.target.checked)} />
-          </Th>
-          <Th>Node</Th>
-          <Th>City</Th>
-          <Th numeric>Capacity</Th>
-          <Th numeric>Demand</Th>
-          <Th numeric>Stock</Th>
-          <Th className="w-20">
-            <span className="sr-only">Actions</span>
-          </Th>
-        </tr>
-      </thead>
-      <tbody>
-        {nodes.map((n) => (
-          <Tr key={n.id} selected={selection?.type === 'node' && selection.id === n.id} onClick={() => onOpen(n)} className={n.status === 'inactive' ? 'opacity-60' : ''}>
-            <Td onClick={(e) => e.stopPropagation()}>
-              <input type="checkbox" aria-label={`Select ${n.id}`} checked={checked.has(n.id)} onChange={(e) => onCheck(n.id, e.target.checked)} />
-            </Td>
-            <Td>
-              <NodeTag node={n} nameClassName="max-w-[11rem]" />
-              <div className="mt-0.5 flex gap-1 text-xs text-fg-muted">
-                {typeOf(n.kind).label}
-                {n.is_backup && <Badge tone="accent">backup</Badge>}
-                {n.status === 'inactive' && <Badge>inactive</Badge>}
-              </div>
-            </Td>
-            <Td className="max-w-[9rem] truncate text-fg-2">{n.city || '-'}</Td>
-            <Td numeric>{fmtNum(n.kind === 'factory' && n.production_capacity ? n.production_capacity : n.capacity)}</Td>
-            <Td numeric>{isDemand(n.kind) ? fmtNum(n.daily_demand) : '-'}</Td>
-            <Td numeric>{fmtNum((n.stock || 0) + (n.kind === 'retailer' ? n.shelf_stock || 0 : 0))}</Td>
-            <Td className="text-right" onClick={(e) => e.stopPropagation()}>
-              <span className="inline-flex">
-                <Button size="icon" variant="ghost" icon={Copy} aria-label={`Duplicate ${n.id}`} title="Duplicate" onClick={() => onDuplicate(n)} />
-                <Button size="icon" variant="danger" icon={Trash2} aria-label={`Delete ${n.id}`} title="Delete" onClick={() => onDelete([n.id])} />
-              </span>
-            </Td>
-          </Tr>
-        ))}
-      </tbody>
-    </Table>
-  )
-}
-
-function EdgeTable({ edges, selection, checked, onCheck, onCheckAll, onOpen, onDelete }) {
-  const allChecked = edges.length > 0 && edges.every((e) => checked.has(e.id))
-  return (
-    <Table label="Lanes" className="max-h-[440px]">
-      <thead>
-        <tr>
-          <Th className="w-8">
-            <input type="checkbox" aria-label="Select all lanes" checked={allChecked} onChange={(e) => onCheckAll(e.target.checked)} />
-          </Th>
-          <Th>Lane</Th>
-          <Th>Mode</Th>
-          <Th numeric>km</Th>
-          <Th numeric>Lead</Th>
-          <Th numeric>Cap/day</Th>
-          <Th numeric>₹/unit</Th>
-          <Th numeric>CO₂</Th>
-          <Th className="w-12">
-            <span className="sr-only">Actions</span>
-          </Th>
-        </tr>
-      </thead>
-      <tbody>
-        {edges.map((e) => (
-          <Tr key={e.id} selected={selection?.type === 'edge' && selection.id === e.id} onClick={() => onOpen(e)} className={e.status === 'inactive' ? 'opacity-60' : ''}>
-            <Td onClick={(ev) => ev.stopPropagation()}>
-              <input type="checkbox" aria-label={`Select lane ${e.id}`} checked={checked.has(e.id)} onChange={(ev) => onCheck(e.id, ev.target.checked)} />
-            </Td>
-            <Td>
-              <NodeTag id={`${e.source}->${e.target}`} />
-              <div className="text-xs text-fg-muted">{e.id}</div>
-            </Td>
-            <Td className="capitalize text-fg-2">{e.mode}</Td>
-            <Td numeric>{fmtNum(e.distance_km)}</Td>
-            <Td numeric>{fmtNum(e.lead, 1)} d</Td>
-            <Td numeric>{fmtNum(e.capacity)}</Td>
-            <Td numeric>{fmtNum(e.cost, 1)}</Td>
-            <Td numeric>{fmtNum(e.co2, 2)}</Td>
-            <Td className="text-right" onClick={(ev) => ev.stopPropagation()}>
-              <Button size="icon" variant="danger" icon={Trash2} aria-label={`Delete lane ${e.id}`} title="Delete" onClick={() => onDelete([e.id])} />
-            </Td>
-          </Tr>
-        ))}
-      </tbody>
-    </Table>
-  )
-}
-
 /**
  * Manual network builder. The server holds the manual network (every edit is saved and validated there); undo/redo
- * restore snapshots through the import endpoint. "Apply network" makes it the active source for every tab.
+ * restore snapshots through the import endpoint. "Apply network" makes it the active source for every page.
  */
 export default function ManualBuilder() {
   const store = useStore()
@@ -197,13 +94,9 @@ export default function ManualBuilder() {
     goTo(sel.id)
   }
 
-  const filteredNodes = nodes.filter((n) => {
-    if (kindFilter !== 'all' && n.kind !== kindFilter) return false
-    const q = query.trim().toLowerCase()
-    return !q || [n.id, n.name, n.city].some((v) => String(v || '').toLowerCase().includes(q))
-  })
+  const q = query.trim().toLowerCase()
+  const filteredNodes = nodes.filter((n) => (kindFilter === 'all' || n.kind === kindFilter) && (!q || [n.id, n.name, n.city].some((v) => String(v || '').toLowerCase().includes(q))))
   const filteredEdges = edges.filter((e) => {
-    const q = query.trim().toLowerCase()
     const kinds = [nodes.find((n) => n.id === e.source)?.kind, nodes.find((n) => n.id === e.target)?.kind]
     if (kindFilter !== 'all' && !kinds.includes(kindFilter)) return false
     return !q || [e.id, e.source, e.target, e.mode].some((v) => String(v || '').toLowerCase().includes(q))
@@ -253,7 +146,7 @@ export default function ManualBuilder() {
       confirmLabel: lanes.length ? `Delete node${ids.length > 1 ? 's' : ''} and ${lanes.length} lane${lanes.length === 1 ? '' : 's'}` : 'Delete',
       body: (
         <>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-x-3 gap-y-1.5">
             {ids.map((id) => (
               <NodeTag key={id} id={id} node={nodes.find((n) => n.id === id)} />
             ))}
@@ -264,7 +157,7 @@ export default function ManualBuilder() {
               <ul className="mt-1.5 max-h-40 space-y-1 overflow-auto">
                 {lanes.map((e) => (
                   <li key={e.id} className="flex items-center gap-2 text-xs">
-                    <span className="tabular text-fg-muted">{e.id}</span>
+                    <span className="num w-8 text-fg-muted">{e.id}</span>
                     <NodeTag id={`${e.source}->${e.target}`} />
                   </li>
                 ))}
@@ -297,7 +190,7 @@ export default function ManualBuilder() {
             const e = edges.find((x) => x.id === id)
             return (
               <li key={id} className="flex items-center gap-2 text-xs">
-                <span className="tabular text-fg-muted">{id}</span>
+                <span className="num w-8 text-fg-muted">{id}</span>
                 {e && <NodeTag id={`${e.source}->${e.target}`} />}
               </li>
             )
@@ -318,7 +211,7 @@ export default function ManualBuilder() {
     const res = await store.setSource('manual')
     if (res.ok) {
       setActionError(null)
-      toast('Manual network applied', { description: `${nodes.length} nodes · ${edges.length} lanes are now used by every tab` })
+      toast('Manual network applied', { description: `${nodes.length} nodes · ${edges.length} lanes are now used on every page` })
     } else setActionError(res.error)
   }
   const startFromPreset = async () => {
@@ -360,72 +253,121 @@ export default function ManualBuilder() {
     const res = await store[dir]()
     if (res) after(res, dir === 'undo' ? `Undid: ${res.label}` : `Redid: ${res.label}`)
   }
-
-  // ------------------------------------------------ render
-  if (!manual) {
-    return (
-      <Card>
-        <CardBody>
-          {errors.manual ? <InlineError message={errors.manual} onRetry={loadManual} /> : <Skeleton className="h-64 w-full" />}
-        </CardBody>
-      </Card>
-    )
-  }
-
-  const checkedList = [...checked].filter((id) => (table === 'nodes' ? nodes.some((n) => n.id === id) : edgeIds.has(id)))
   const lastUndo = history.past[history.past.length - 1]
   const lastRedo = history.future[history.future.length - 1]
 
+  useHotkeys({
+    'mod+z': () => (busy || !lastUndo ? false : travel('undo')),
+    'mod+shift+z': () => (busy || !lastRedo ? false : travel('redo')),
+    'mod+y': () => (busy || !lastRedo ? false : travel('redo')),
+    escape: () => (panel ? close() : false),
+  })
+
+  // ------------------------------------------------ render
+  if (!manual) {
+    return <Panel className="p-4">{errors.manual ? <InlineError message={errors.manual} onRetry={loadManual} /> : <Skeleton className="h-64 w-full" />}</Panel>
+  }
+
+  const checkedList = [...checked].filter((id) => (table === 'nodes' ? nodes.some((n) => n.id === id) : edgeIds.has(id)))
+  const toggleCheck = (id, on) =>
+    setChecked((s) => {
+      const next = new Set(s)
+      if (on) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  const rowsShown = table === 'nodes' ? filteredNodes : filteredEdges
+  const allChecked = rowsShown.length > 0 && rowsShown.every((r) => checked.has(r.id))
+  const checkColumn = {
+    key: 'check', sortable: false, hideable: false, width: 'w-8',
+    header: (
+      <input type="checkbox" aria-label={`Select all ${table}`} checked={allChecked} onChange={(e) => setChecked(e.target.checked ? new Set(rowsShown.map((r) => r.id)) : new Set())} />
+    ),
+    render: (r) => (
+      <input type="checkbox" aria-label={`Select ${r.id}`} checked={checked.has(r.id)} onClick={(e) => e.stopPropagation()} onChange={(e) => toggleCheck(r.id, e.target.checked)} />
+    ),
+  }
+  const nodeColumns = [
+    checkColumn,
+    {
+      key: 'name', header: 'Node', hideable: false, value: (n) => n.name,
+      render: (n) => (
+        <span className="flex items-center gap-2">
+          <NodeTag node={n} nameClassName="max-w-[12rem]" />
+          {n.is_backup && <span className="text-2xs text-fg-muted">backup</span>}
+          {n.status === 'inactive' && <span className="text-2xs text-fg-muted">inactive</span>}
+        </span>
+      ),
+    },
+    { key: 'kind', header: 'Type', value: (n) => typeOf(n.kind).tier, render: (n) => <span className="text-fg-2">{typeOf(n.kind).label}</span> },
+    { key: 'city', header: 'City', render: (n) => <span className="block max-w-[9rem] truncate text-fg-2">{n.city || '–'}</span> },
+    { key: 'capacity', header: 'Capacity', align: 'right', value: (n) => (n.kind === 'factory' && n.production_capacity ? n.production_capacity : n.capacity), render: (n) => fmtNum(n.kind === 'factory' && n.production_capacity ? n.production_capacity : n.capacity) },
+    { key: 'daily_demand', header: 'Demand', align: 'right', value: (n) => (isDemand(n.kind) ? n.daily_demand : null), render: (n) => (isDemand(n.kind) ? fmtNum(n.daily_demand) : '–') },
+    { key: 'stock', header: 'Stock', align: 'right', value: (n) => (n.stock || 0) + (n.kind === 'retailer' ? n.shelf_stock || 0 : 0), render: (n) => fmtNum((n.stock || 0) + (n.kind === 'retailer' ? n.shelf_stock || 0 : 0)) },
+    {
+      key: 'act', header: '', sortable: false, hideable: false, width: 'w-16',
+      render: (n) => (
+        <span className="row-actions flex justify-end" onClick={(e) => e.stopPropagation()}>
+          <IconButton icon={Copy} label={`Duplicate ${n.id}`} size="xs" tooltipSide="left" onClick={() => duplicate(n)} />
+          <IconButton icon={Trash2} label={`Delete ${n.id}`} size="xs" tooltipSide="left" onClick={() => askDeleteNodes([n.id])} />
+        </span>
+      ),
+    },
+  ]
+  const laneColumns = [
+    checkColumn,
+    { key: 'lane', header: 'Lane', hideable: false, value: (e) => `${e.source}${e.target}`, render: (e) => <NodeTag id={`${e.source}->${e.target}`} /> },
+    { key: 'id', header: 'ID', mono: true, render: (e) => <span className="text-fg-muted">{e.id}</span> },
+    { key: 'mode', header: 'Mode', render: (e) => <span className="capitalize text-fg-2">{e.mode}</span> },
+    { key: 'distance_km', header: 'km', align: 'right', render: (e) => fmtNum(e.distance_km) },
+    { key: 'lead', header: 'Lead', align: 'right', render: (e) => `${fmtNum(e.lead, 1)} d` },
+    { key: 'capacity', header: 'Cap/day', align: 'right', render: (e) => fmtNum(e.capacity) },
+    { key: 'cost', header: '₹/unit', align: 'right', render: (e) => fmtNum(e.cost, 1) },
+    { key: 'co2', header: 'CO₂ kg', align: 'right', defaultHidden: true, render: (e) => fmtNum(e.co2, 2) },
+    {
+      key: 'act', header: '', sortable: false, hideable: false, width: 'w-10',
+      render: (e) => (
+        <span className="row-actions flex justify-end" onClick={(ev) => ev.stopPropagation()}>
+          <IconButton icon={Trash2} label={`Delete lane ${e.id}`} size="xs" tooltipSide="left" onClick={() => askDeleteEdges([e.id])} />
+        </span>
+      ),
+    },
+  ]
+
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardBody className="space-y-3">
-          <Toolbar>
-            <Button variant="primary" icon={CheckCircle2} disabled={!canApply || busy} onClick={apply} title={canApply ? 'Use this network on every tab' : 'Fix the errors first'}>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {nodes.length > 0 && (
+          <>
+            <Button variant="primary" icon={CheckCircle2} disabled={!canApply || busy} onClick={apply} title={canApply ? 'Use this network on every page' : 'Fix the errors first'}>
               {isActive ? 'Re-apply network' : 'Apply network'}
             </Button>
-            {isActive ? <Badge tone="ok" dot>Active on every tab</Badge> : <Badge>Not active</Badge>}
-            <Divider />
-            <Button size="sm" icon={Plus} onClick={() => open({ type: 'pick' })} disabled={busy}>
-              Add node
-            </Button>
-            <Button size="sm" icon={Route} onClick={() => open({ type: 'edge' })} disabled={busy || nodes.length < 2}>
-              Add lane
-            </Button>
-            <Divider />
-            <Button size="sm" variant="ghost" icon={Undo2} onClick={() => travel('undo')} disabled={busy || !lastUndo} title={lastUndo ? `Undo: ${lastUndo.label}` : 'Nothing to undo'}>
-              Undo
-            </Button>
-            <Button size="sm" variant="ghost" icon={Redo2} onClick={() => travel('redo')} disabled={busy || !lastRedo} title={lastRedo ? `Redo: ${lastRedo.label}` : 'Nothing to redo'}>
-              Redo
-            </Button>
-            <Divider />
-            <Button size="sm" variant="ghost" icon={Upload} onClick={() => fileRef.current?.click()} disabled={busy}>
-              Import JSON
-            </Button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={(e) => {
-                importJson(e.target.files?.[0])
-                e.target.value = ''
-              }}
-            />
-            <Button size="sm" variant="ghost" icon={FileJson} onClick={exportJson} disabled={busy || !nodes.length}>
-              Export JSON
-            </Button>
-            <Button size="sm" variant="ghost" icon={FileSpreadsheet} onClick={exportCsv} disabled={busy || !nodes.length}>
-              Export CSV
-            </Button>
-            <Divider />
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={RotateCcw}
-              disabled={busy}
-              onClick={() =>
+            <StatusDot status={isActive ? 'ok' : 'neutral'} label={isActive ? 'Active on every page' : 'Not active'} />
+            <Divider className="mx-1" />
+          </>
+        )}
+        <Button icon={Plus} onClick={() => open({ type: 'pick' })} disabled={busy}>
+          Add node
+        </Button>
+        <Button icon={Route} onClick={() => open({ type: 'edge' })} disabled={busy || nodes.length < 2}>
+          Add lane
+        </Button>
+        <Divider className="mx-1" />
+        <IconButton icon={Undo2} label={lastUndo ? `Undo: ${lastUndo.label}` : 'Nothing to undo'} shortcut={`${MOD_LABEL} Z`} onClick={() => travel('undo')} disabled={busy || !lastUndo} />
+        <IconButton icon={Redo2} label={lastRedo ? `Redo: ${lastRedo.label}` : 'Nothing to redo'} shortcut={`${MOD_LABEL} ⇧ Z`} onClick={() => travel('redo')} disabled={busy || !lastRedo} />
+        <Menu
+          icon={MoreHorizontal}
+          label="More"
+          variant="ghost"
+          size="md"
+          items={[
+            { key: 'import', label: 'Import JSON…', icon: Upload, onSelect: () => fileRef.current?.click(), disabled: busy },
+            { key: 'json', label: 'Export JSON', icon: FileJson, onSelect: exportJson, disabled: !nodes.length },
+            { key: 'csv', label: 'Export CSV (nodes + edges)', icon: FileSpreadsheet, onSelect: exportCsv, disabled: !nodes.length },
+            { key: 'sep', separator: true },
+            {
+              key: 'reset', label: 'Reset to the preset', icon: RotateCcw, disabled: busy,
+              onSelect: () =>
                 setConfirm({
                   title: 'Reset to the preset?',
                   confirmLabel: 'Reset to preset',
@@ -435,22 +377,16 @@ export default function ManualBuilder() {
                     setConfirm(null)
                     after(res, 'Builder reset to the preset', 'The preset demo is active again')
                   },
-                })
-              }
-            >
-              Reset to preset
-            </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              icon={Eraser}
-              disabled={busy || !nodes.length}
-              onClick={() =>
+                }),
+            },
+            {
+              key: 'clear', label: 'Clear all', icon: Eraser, danger: true, disabled: busy || !nodes.length,
+              onSelect: () =>
                 setConfirm({
                   title: 'Clear the manual network?',
                   confirmLabel: `Remove ${nodes.length} nodes and ${edges.length} lanes`,
                   body: isActive
-                    ? 'The manual network is active, so every tab will show an empty network until you add nodes or switch source. You can undo this.'
+                    ? 'The manual network is active, so every page will show an empty network until you add nodes or switch source. You can undo this.'
                     : 'Every node and lane in the builder is removed. You can undo this.',
                   onConfirm: async () => {
                     const res = await store.resetManual('empty')
@@ -458,23 +394,29 @@ export default function ManualBuilder() {
                     after(res, 'Manual network cleared')
                     close()
                   },
-                })
-              }
-            >
-              Clear all
-            </Button>
-          </Toolbar>
-          <ValidationPanel validation={validation} onGoTo={goTo} edgeIds={edgeIds} />
-          <InlineError message={actionError || errors.builder || errors.source} />
-        </CardBody>
-      </Card>
+                }),
+            },
+          ]}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={(e) => {
+            importJson(e.target.files?.[0])
+            e.target.value = ''
+          }}
+        />
+      </div>
+      <ValidationPanel validation={validation} onGoTo={goTo} edgeIds={edgeIds} />
+      <InlineError message={actionError || errors.builder || errors.source} />
 
       {nodes.length === 0 && !panel ? (
-        <Card>
+        <Panel>
           <EmptyState
-            icon={Wand2}
             title="Build a network by hand"
-            description="Start from a copy of the preset demo and edit it, or add sites one by one: at least one supplier and one retailer or customer, connected by lanes."
+            description="Start from a copy of the preset demo, or add sites one by one: at least one supplier and one retailer or customer, connected by lanes."
             action={
               <div className="flex flex-wrap justify-center gap-2">
                 <Button variant="primary" icon={Copy} onClick={startFromPreset} disabled={busy}>
@@ -486,89 +428,82 @@ export default function ManualBuilder() {
               </div>
             }
           />
-        </Card>
+        </Panel>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-12">
-          <Card className="min-w-0 xl:col-span-7">
-            <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
-              <SegmentedControl
-                size="sm"
-                label="Table"
-                value={table}
-                onChange={(v) => {
-                  setTable(v)
-                  setChecked(new Set())
-                }}
-                options={[
-                  { value: 'nodes', label: `Nodes (${nodes.length})` },
-                  { value: 'lanes', label: `Lanes (${edges.length})` },
-                ]}
+        <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <Panel className="flex min-h-[460px] min-w-0 flex-col overflow-hidden">
+            <Tabs
+              idBase="builder"
+              label="Builder tables"
+              value={table}
+              onChange={(v) => {
+                setTable(v)
+                setChecked(new Set())
+              }}
+              className="px-4"
+              tabs={[
+                { value: 'nodes', label: 'Nodes', count: nodes.length },
+                { value: 'lanes', label: 'Lanes', count: edges.length },
+              ]}
+            />
+            <TabPanel idBase="builder" value={table} className="flex min-h-0 flex-1 flex-col">
+              <DataTable
+                key={table}
+                label={table === 'nodes' ? 'Nodes' : 'Lanes'}
+                rows={rowsShown}
+                columns={table === 'nodes' ? nodeColumns : laneColumns}
+                selectedKey={selection?.type === (table === 'nodes' ? 'node' : 'edge') ? selection.id : null}
+                onRowClick={(r) => open(table === 'nodes' ? { type: 'node', node: r } : { type: 'edge', edge: r })}
+                empty={table === 'lanes' && !edges.length ? 'No lanes yet. Use "Add lane" to connect two nodes.' : 'Nothing matches the search or filter.'}
+                className="min-h-0 flex-1"
+                toolbar={
+                  <>
+                    <Input size="sm" className="max-w-[16rem]" placeholder="Search id, name, city" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search" />
+                    <Select size="sm" className="w-36" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} aria-label="Filter by type">
+                      <option value="all">All types</option>
+                      {NODE_KINDS.map((k) => (
+                        <option key={k} value={k}>
+                          {typeOf(k).plural}
+                        </option>
+                      ))}
+                    </Select>
+                    {checkedList.length > 0 && (
+                      <Button size="sm" variant="danger" icon={Trash2} onClick={() => (table === 'nodes' ? askDeleteNodes(checkedList) : askDeleteEdges(checkedList))}>
+                        Delete {checkedList.length}
+                      </Button>
+                    )}
+                  </>
+                }
               />
-              <div className="relative min-w-[10rem] flex-1">
-                <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-fg-muted" aria-hidden />
-                <input className="input h-8 pl-8 text-xs" placeholder="Search id, name, city…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search" />
-              </div>
-              <select className="input h-8 w-auto py-0 text-xs" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} aria-label="Filter by type">
-                <option value="all">All types</option>
-                {NODE_KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    {typeOf(k).plural}
-                  </option>
-                ))}
-              </select>
-              {checkedList.length > 0 && (
-                <Button size="sm" variant="danger" icon={Trash2} onClick={() => (table === 'nodes' ? askDeleteNodes(checkedList) : askDeleteEdges(checkedList))}>
-                  Delete {checkedList.length}
-                </Button>
-              )}
-            </div>
-            <CardBody className="px-0 pb-2">
-              {(table === 'nodes' ? filteredNodes : filteredEdges).length === 0 ? (
-                <p className="px-5 py-6 text-center text-sm text-fg-muted">
-                  {table === 'lanes' && !edges.length ? 'No lanes yet. Use "Add lane" to connect two nodes.' : 'Nothing matches the search or filter.'}
-                </p>
-              ) : table === 'nodes' ? (
-                <NodeTable
-                  nodes={filteredNodes}
-                  selection={selection}
-                  checked={checked}
-                  onCheck={(id, on) => setChecked((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })}
-                  onCheckAll={(on) => setChecked(on ? new Set(filteredNodes.map((n) => n.id)) : new Set())}
-                  onOpen={(n) => open({ type: 'node', node: n })}
-                  onDuplicate={duplicate}
-                  onDelete={askDeleteNodes}
-                />
-              ) : (
-                <EdgeTable
-                  edges={filteredEdges}
-                  selection={selection}
-                  checked={checked}
-                  onCheck={(id, on) => setChecked((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })}
-                  onCheckAll={(on) => setChecked(on ? new Set(filteredEdges.map((e) => e.id)) : new Set())}
-                  onOpen={(e) => open({ type: 'edge', edge: e })}
-                  onDelete={askDeleteEdges}
-                />
-              )}
-            </CardBody>
-          </Card>
+            </TabPanel>
+          </Panel>
 
-          <Card className="min-w-0 xl:col-span-5 xl:self-start">
-            <CardBody>
-              {!panel && (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-fg">Add a node</p>
-                  <TypePicker onPick={(kind) => open({ type: 'node', kind })} />
-                  <p className="text-xs text-fg-muted">Or click a row, or a marker on the map, to edit it.</p>
-                </div>
-              )}
-              {panel?.type === 'pick' && (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-fg">What are you adding?</p>
-                  <TypePicker onPick={(kind) => open({ type: 'node', kind })} />
-                  <Button size="sm" onClick={close}>
-                    Cancel
-                  </Button>
-                </div>
+          <div className="space-y-3 xl:sticky xl:top-0">
+            <Panel className="overflow-hidden">
+              <BuilderMap
+                className="h-[240px]"
+                framed={false}
+                nodes={nodes}
+                edges={edges}
+                selection={selection}
+                onSelect={onMapSelect}
+                pickMode={picking}
+                onPick={(loc) => {
+                  setPicked(loc)
+                  setPicking(false)
+                }}
+                pin={panel?.type === 'node' ? pin : null}
+              />
+            </Panel>
+            <Panel className="flex max-h-[calc(100vh-22rem)] min-h-[300px] flex-col overflow-hidden">
+              {(!panel || panel.type === 'pick') && (
+                <>
+                  <PanelHeader title="Add a node" actions={panel?.type === 'pick' && <Button size="sm" variant="ghost" onClick={close}>Cancel</Button>} />
+                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+                    <TypePicker onPick={(kind) => open({ type: 'node', kind })} />
+                    <p className="mt-2 text-xs text-fg-muted">Or select a row or a map marker to edit it.</p>
+                  </div>
+                </>
               )}
               {panel?.type === 'node' && (
                 <NodeForm
@@ -600,49 +535,12 @@ export default function ManualBuilder() {
                   onDelete={() => askDeleteEdges([panel.edge.id])}
                 />
               )}
-            </CardBody>
-          </Card>
+            </Panel>
+          </div>
         </div>
       )}
 
-      <Card>
-        <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
-          <h3 className="text-sm font-semibold text-fg">Live map preview</h3>
-          <span className="text-xs text-fg-muted">Works offline · click a marker or lane to edit it · scroll to zoom, drag to pan</span>
-          <span className="ml-auto flex flex-wrap gap-2 text-xs text-fg-muted">
-            {NODE_KINDS.map((k) => (
-              <span key={k} className="inline-flex items-center gap-1">
-                <TypeIcon kind={k} size="xs" />
-                {typeOf(k).label}
-              </span>
-            ))}
-          </span>
-        </div>
-        <CardBody>
-          <BuilderMap
-            className={cn('h-[460px]', picking && 'ring-2 ring-accent')}
-            nodes={nodes}
-            edges={edges}
-            selection={selection}
-            onSelect={onMapSelect}
-            pickMode={picking}
-            onPick={(loc) => {
-              setPicked(loc)
-              setPicking(false)
-            }}
-            pin={panel?.type === 'node' ? pin : null}
-          />
-        </CardBody>
-      </Card>
-
-      <ConfirmDialog
-        open={Boolean(confirm)}
-        title={confirm?.title}
-        confirmLabel={confirm?.confirmLabel}
-        busy={busy}
-        onConfirm={() => confirm?.onConfirm()}
-        onCancel={cancelConfirm}
-      >
+      <ConfirmDialog open={Boolean(confirm)} title={confirm?.title} confirmLabel={confirm?.confirmLabel} busy={busy} onConfirm={() => confirm?.onConfirm()} onCancel={cancelConfirm}>
         {confirm?.body}
       </ConfirmDialog>
     </div>

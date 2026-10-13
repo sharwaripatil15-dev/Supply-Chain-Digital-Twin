@@ -66,6 +66,13 @@ class Event(BaseModel):
     start: int = Field(ge=0, description="day the disruption begins")
     duration: int = Field(ge=1, le=365, description="days")
     severity: float = Field(ge=0, le=1, description="0 = no effect, 1 = total outage / +100% demand")
+    # Optional provenance, set on events derived from the weather forecast (POST /weather/apply). Older clients omit them.
+    source: Literal["user", "weather"] | None = Field(default=None, description='"weather" for forecast-derived events')
+    confidence: float | None = Field(default=None, ge=0, le=1, description="forecast confidence (lower further out)")
+    lead_multiplier: float | None = Field(
+        default=None, ge=1, le=10, description="edge events: lead time x this factor while active (weather slowdowns)"
+    )
+    reason: str | None = Field(default=None, max_length=300, description="plain-English cause, e.g. the weather drivers")
 
 
 class SimulateRequest(BaseModel):
@@ -433,3 +440,19 @@ class ExportedNetwork(BuilderNetwork):
     schema_version: int = 1
     source: NetworkSource
     version: int
+
+
+# ---------------------------------------------------------------- weather (/weather/*)
+class WeatherApplyRequest(BaseModel):
+    horizon: int = Field(default=7, ge=1, le=16, description="forecast days to convert")
+    min_level: Literal["moderate", "high", "severe"] = Field(default="high", description="lowest risk level that becomes an event")
+    include_nodes: bool = Field(default=True, description="also create site events (flooded plant, closed port)")
+
+
+class WeatherRerouteRequest(BaseModel):
+    events: list[Event] | None = Field(default=None, description="weather events to plan for; default: derived from the forecast")
+    horizon: int = Field(default=7, ge=1, le=16)
+
+
+class WeatherScenarioRequest(BaseModel):
+    id: str | None = Field(default=None, description="scenario id to activate; null returns to live data")

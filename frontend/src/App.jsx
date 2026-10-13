@@ -1,25 +1,28 @@
 import { useEffect } from 'react'
 import { useStore } from './store.js'
 import AppShell from './components/layout/AppShell.jsx'
-import { Card, InlineError, Skeleton } from './components/ui/index.js'
+import { Button, EmptyState, KpiStrip, Panel, Skeleton } from './components/ui/index.js'
 import TwinPage from './pages/TwinPage.jsx'
 import SimulatePage from './pages/SimulatePage.jsx'
+import ChaosPage from './pages/ChaosPage.jsx'
 import RecoverPage from './pages/RecoverPage.jsx'
 import DataPage from './pages/DataPage.jsx'
-import ChaosFinder from './components/ChaosFinder.jsx'
 
-const PAGES = { twin: TwinPage, simulate: SimulatePage, chaos: ChaosFinder, recover: RecoverPage, data: DataPage }
+const PAGES = { twin: TwinPage, simulate: SimulatePage, chaos: ChaosPage, recover: RecoverPage, data: DataPage }
 
+/** Placeholder with the same shape as the Twin page (KPI strip + workspace). */
 function LoadingShell() {
   return (
-    <div role="status" aria-label="Loading digital twin" className="space-y-6">
-      <Skeleton className="h-7 w-56" />
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-24" />
-        ))}
-      </div>
-      <Skeleton className="h-[520px]" />
+    <div role="status" aria-label="Loading the digital twin" className="flex h-full min-h-[560px] flex-col gap-3 p-4">
+      <KpiStrip loading items={[{ label: 'Sites' }, { label: 'Lanes' }, { label: 'Demand' }, { label: 'Resilience' }, { label: 'Most critical site' }]} />
+      <Panel className="flex min-h-0 flex-1 overflow-hidden">
+        <Skeleton className="h-full flex-1 rounded-none" />
+        <div className="hidden w-[320px] space-y-3 border-l border-border p-4 xl:block">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-2/3" />
+        </div>
+      </Panel>
     </div>
   )
 }
@@ -37,10 +40,11 @@ export default function App() {
       {network ? (
         <Page />
       ) : errors.network ? (
-        <Card className="mx-auto mt-16 max-w-xl p-5">
-          <p className="mb-3 text-sm font-medium text-fg">Couldn't load the digital twin</p>
-          <InlineError message={errors.network} onRetry={loadNetwork} />
-        </Card>
+        <div className="p-4">
+          <Panel className="mx-auto mt-16 max-w-md">
+            <EmptyState title="Couldn't load the digital twin" description={errors.network} action={<Button variant="primary" onClick={loadNetwork}>Retry</Button>} />
+          </Panel>
+        </div>
       ) : (
         <LoadingShell />
       )}

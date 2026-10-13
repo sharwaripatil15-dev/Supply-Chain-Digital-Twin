@@ -165,6 +165,17 @@ def _active_state(events: list[Event], day: int, baseline: Mapping[str, list[flo
     return node_f, edge_f, mult
 
 
+def lead_factors(events: list[Event], day: int) -> dict[tuple[str, str], float]:
+    """{(u, v): lead time factor} from edge events active on `day` that carry a lead_multiplier (weather slowdowns)."""
+    out: dict[tuple[str, str], float] = {}
+    for ev in events:
+        if ev.type != "edge" or not ev.lead_multiplier or not ev.start <= day < ev.start + ev.duration:
+            continue
+        u, v = (p.strip() for p in ev.target.split("->"))
+        out[(u, v)] = max(out.get((u, v), 1.0), float(ev.lead_multiplier))
+    return out
+
+
 def spike_baseline(G: nx.DiGraph, events: list[Event], horizon: int) -> dict[str, list[float]] | None:
     """Forecast-based demand baseline, computed only when a scenario has a demand spike."""
     if not any(ev.type == "demand" for ev in events):
@@ -300,7 +311,7 @@ def simulate(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30, detail: 
             "utilization": util,
         })
 
-    delay = delay_stats(G, [daily_flows[d] for d in active_days], base_lead)
+    delay = delay_stats(G, [daily_flows[d] for d in active_days], base_lead, [lead_factors(events, d) for d in active_days])
     result = {
         "timeline": timeline,
         "log": [line for _, line in sorted(log, key=lambda t: t[0])],
