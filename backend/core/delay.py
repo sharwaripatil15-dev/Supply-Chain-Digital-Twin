@@ -3,8 +3,9 @@
 Delay model (implemented):
     For a day's flow solution, the arrival lead time of a node is the flow-weighted average of
     (upstream arrival lead + lane lead) over its inbound lanes; suppliers start at 0. This is exactly the mean
-    path lead time of the units reaching that node when flow mixes proportionally at each node.
-    Extra delay for a customer = its arrival lead under the disrupted flow - its arrival lead under the
+    path lead time of the units reaching that node when flow mixes proportionally at each node. Networks with a
+    cycle (possible in an imported file) are walked in tier order instead; lanes that point back upstream are ignored.
+    Extra delay for a demand node (retailer or customer) = its arrival lead under the disrupted flow - its arrival lead under the
     baseline (undisrupted) flow, i.e. the extra lead time caused by rerouting onto longer paths.
     Units that are not delivered at all are counted as unmet demand, not as delay.
 
@@ -18,6 +19,8 @@ from typing import Iterable, Mapping
 import networkx as nx
 import numpy as np
 
+from node_types import TIER, demand_nodes
+
 BOTTLENECK_THRESHOLD = 0.9
 
 Flow = Mapping[tuple[str, str], float]
@@ -26,7 +29,11 @@ Flow = Mapping[tuple[str, str], float]
 def arrival_lead(G: nx.DiGraph, flow: Flow) -> dict[str, float | None]:
     """Flow-weighted mean lead time (days) from suppliers to each node; None where nothing arrives."""
     lead: dict[str, float | None] = {}
-    for n in nx.topological_sort(G):
+    try:
+        order = list(nx.topological_sort(G))
+    except nx.NetworkXUnfeasible:  # cycle: fall back to tier order
+        order = sorted(G, key=lambda n: (TIER.get(G.nodes[n].get("kind"), 99), str(n)))
+    for n in order:
         inbound = [(u, flow.get((u, n), 0.0)) for u in G.predecessors(n)]
         inbound = [(u, f) for u, f in inbound if f > 0 and lead.get(u) is not None]
         if G.nodes[n]["kind"] == "supplier":
@@ -40,26 +47,29 @@ def arrival_lead(G: nx.DiGraph, flow: Flow) -> dict[str, float | None]:
 
 
 def _customer_samples(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[str, float | None]):
-    """Yield (customer, extra_days, units) per customer-day with deliveries."""
-    customers = [n for n, d in G.nodes(data=True) if d["kind"] == "customer"]
+    """Yield (demand node, extra_days, units) per node-day with deliveries."""
+    customers = demand_nodes(G)
     for flow in daily_flows:
         lead = arrival_lead(G, flow)
         for c in customers:
             units = sum(flow.get((u, c), 0.0) for u in G.predecessors(c))
-            if units <= 0 or lead[c] is None:
+            if units <= 0 or lead.get(c) is None:
                 continue
             extra = max(0.0, lead[c] - (base_lead.get(c) or 0.0))
             yield c, extra, units
 
 
 def customer_delays(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[str, float | None]) -> dict[str, float]:
-    """{customer_id: units-weighted mean extra lead time in days} over the given days."""
+    """{demand_node_id: units-weighted mean extra lead time in days} over the given days."""
     return delay_stats(G, daily_flows, base_lead)["per_customer"]
 
 
 def delay_stats(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[str, float | None]) -> dict:
-    """{avg_days, p90_days, per_customer}: avg and P90 are over every delivered unit in `daily_flows`."""
-    customers = [n for n, d in G.nodes(data=True) if d["kind"] == "customer"]
+    """{avg_days, p90_days, per_customer}: avg and P90 are over every delivered unit in `daily_flows`.
+
+    per_customer covers every demand node (retailers and customers); the key name is the API contract.
+    """
+    customers = demand_nodes(G)
     samples = list(_customer_samples(G, daily_flows, base_lead))
     per_customer = {}
     for c in customers:
@@ -72,7 +82,7 @@ def delay_stats(G: nx.DiGraph, daily_flows: Iterable[Flow], base_lead: Mapping[s
     weight = np.array([w for _, _, w in samples])
     order = np.argsort(extra)
     cum = np.cumsum(weight[order]) / weight.sum()
-    p90 = float(extra[order][np.searchsorted(cum, 0.9)])
+    p90 = float(extra[order][min(len(extra) - 1, int(np.searchsorted(cum, 0.9)))])
     return {
         "avg_days": round(float(np.average(extra, weights=weight)), 2),
         "p90_days": round(p90, 2),

@@ -1,3 +1,5 @@
+import { NODE_TYPES, typeOf } from './lib/nodeTypes.js'
+
 export const fmtNum = (v, digits = 0) =>
   v == null ? '-' : Number(v).toLocaleString('en-IN', { maximumFractionDigits: digits })
 
@@ -15,13 +17,11 @@ export const fmtPct = (v) => (v == null ? '-' : `${Math.round(v * 100)}%`)
 /** "+3", "-9.7", "+₹17": deltas that can go either way. */
 export const fmtSigned = (v, digits = 0, prefix = '') => `${v < 0 ? '-' : '+'}${prefix}${fmtNum(Math.abs(v), digits)}`
 
-/** Tier metadata. Colors come from tokens (tier-*); shapes are used by the 2D graph, disk resolution by 3D. */
-export const KIND = {
-  supplier: { token: 'tierSupplier', shape: 'round-rectangle', label: 'Supplier', plural: 'Suppliers', swatch: 'bg-tier-supplier' },
-  factory: { token: 'tierFactory', shape: 'round-hexagon', label: 'Factory', plural: 'Factories', swatch: 'bg-tier-factory' },
-  warehouse: { token: 'tierWarehouse', shape: 'round-diamond', label: 'Warehouse', plural: 'Warehouses', swatch: 'bg-tier-warehouse' },
-  customer: { token: 'tierCustomer', shape: 'ellipse', label: 'Customer', plural: 'Customers', swatch: 'bg-tier-customer' },
-}
+/** Node-type metadata for views that only need label + swatch. Defined once in lib/nodeTypes.js. */
+const withSwatch = (t) => ({ ...t, shape: t.shape2d, swatch: `bg-tier-${t.kind}` })
+export const KIND = Object.fromEntries(Object.values(NODE_TYPES).map((t) => [t.kind, withSwatch(t)]))
+/** Like KIND[kind], but never undefined (unknown kinds get a neutral fallback). */
+export const kindMeta = (kind) => KIND[kind] || withSwatch(typeOf(kind))
 
 /** Node status -> token key + Badge tone. */
 export const STATUS = {

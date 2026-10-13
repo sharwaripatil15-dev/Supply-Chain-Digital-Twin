@@ -16,11 +16,12 @@ from typing import Any
 import numpy as np
 
 from core.delay import find_bottlenecks, summarize_delays
+from node_types import KINDS, is_demand
 
 _NET: dict[str, Any] = json.loads((Path(__file__).parent / "demo_network.json").read_text(encoding="utf-8"))
 NODES: dict[str, dict] = {n["id"]: n for n in _NET["nodes"]}
 EDGES: list[dict] = _NET["edges"]
-TIER_ORDER = ["supplier", "factory", "warehouse", "customer"]
+TIER_ORDER = KINDS
 UNIT_PRICE_INR = 4200  # average selling price per finished unit
 
 _OUT: dict[str, list[dict]] = defaultdict(list)
@@ -106,7 +107,7 @@ def simulate(events: list, horizon: int = 30) -> dict:
         util = {}
         for nid, node in NODES.items():
             lvl = level[d][nid]
-            if node["kind"] == "customer":
+            if is_demand(node["kind"]):
                 util[nid] = 0.0
                 if lvl:
                     delay_acc[nid] += (0.6 if lvl == 2 else 0.35) * sev_at[d][nid]
@@ -120,7 +121,7 @@ def simulate(events: list, horizon: int = 30) -> dict:
 
         unmet = 0.0
         for nid, node in NODES.items():
-            if node["kind"] != "customer" or not level[d][nid]:
+            if not is_demand(node["kind"]) or not level[d][nid]:
                 continue
             factor = 1.0 if level[d][nid] == 2 else 0.35
             unmet += node["demand"] * sev_at[d][nid] * factor
@@ -145,7 +146,7 @@ def simulate(events: list, horizon: int = 30) -> dict:
         "total_unmet": round(total_unmet, 1),
         "survival_clock_days": survival,
         "revenue_at_risk": round(total_unmet * UNIT_PRICE_INR, 0),
-        "delay": summarize_delays({c: delay_acc.get(c, 0.0) for c, n in NODES.items() if n["kind"] == "customer"}),
+        "delay": summarize_delays({c: delay_acc.get(c, 0.0) for c, n in NODES.items() if is_demand(n["kind"])}),
         "bottlenecks": find_bottlenecks(timeline),
     }
 
@@ -166,7 +167,7 @@ def _narrate(events: list[dict], timeline: list[dict]) -> list[str]:
             if st == prev[nid]:
                 continue
             if st == "down":
-                tag = "STOCKOUT" if NODES[nid]["kind"] == "customer" else "DOWN"
+                tag = "STOCKOUT" if is_demand(NODES[nid]["kind"]) else "DOWN"
                 log.append(f"Day {row['day']}: {_label(nid)} {tag}")
             elif st == "stressed" and prev[nid] == "ok":
                 log.append(f"Day {row['day']}: {_label(nid)} stressed - inbound supply short, drawing down stock")
@@ -347,7 +348,7 @@ def forecast(horizon: int = 14) -> dict:
 
     customers = []
     for nid, node in NODES.items():
-        if node["kind"] != "customer":
+        if not is_demand(node["kind"]):
             continue
         base, sigma, trend = node["demand"], node["demand"] * 0.07, node["demand"] * 0.002
         history = [{"day": d, "demand": round(float(base * season(d) + trend * d + rng.normal(0, sigma)), 1)}

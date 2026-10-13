@@ -1,7 +1,9 @@
 import { Gauge, TriangleAlert } from 'lucide-react'
 import { useStore } from '../store.js'
-import { BOTTLENECK, KIND, fmtPct } from '../format.js'
+import { BOTTLENECK, fmtPct } from '../format.js'
+import { isDemand } from '../lib/nodeTypes.js'
 import { Badge, Card, CardBody, CardHeader, EmptyState, Meter, cn } from './ui/index.js'
+import { TypeIcon } from './NodeTypeIcon.jsx'
 
 export default function UtilizationBars() {
   const { sim, day, setDay, network } = useStore()
@@ -16,9 +18,11 @@ export default function UtilizationBars() {
     )
   }
   const row = sim.timeline[day] || sim.timeline[0]
-  const kindOf = Object.fromEntries(network.nodes.map((n) => [n.id, n.kind]))
-  const rows = Object.entries(row.utilization)
-    .filter(([id]) => kindOf[id] !== 'customer')
+  const byId = Object.fromEntries((network?.nodes ?? []).map((n) => [n.id, n]))
+  const kindOf = (id) => byId[id]?.kind
+  // demand points only have a load when they forward stock (a retailer with a capacity)
+  const rows = Object.entries(row?.utilization ?? {})
+    .filter(([id]) => !isDemand(kindOf(id)) || (byId[id]?.capacity ?? 0) > 0)
     .sort((a, b) => b[1] - a[1])
 
   return (
@@ -30,10 +34,10 @@ export default function UtilizationBars() {
             const hot = u > BOTTLENECK.threshold
             const down = row.node_status[id] === 'down'
             return (
-              <li key={id} className="grid grid-cols-[3.5rem_1fr_3.5rem] items-center gap-3 text-xs">
-                <span className="flex items-center gap-1.5 font-medium text-fg">
-                  <span className={cn('h-2 w-2 rounded-sm', KIND[kindOf[id]].swatch)} aria-hidden />
-                  {id}
+              <li key={id} className="grid grid-cols-[4.5rem_1fr_3.5rem] items-center gap-3 text-xs">
+                <span className="flex min-w-0 items-center gap-1.5 font-medium text-fg" title={byId[id]?.name}>
+                  <TypeIcon kind={kindOf(id)} size="xs" />
+                  <span className="truncate">{id}</span>
                 </span>
                 <Meter value={u} max={1.2} threshold={BOTTLENECK.threshold} tone={down ? 'muted' : undefined} label={`${id} utilization`} />
                 <span className={cn('tabular text-right', hot ? 'font-semibold text-warn' : 'text-fg-2')}>{down ? 'down' : fmtPct(u)}</span>

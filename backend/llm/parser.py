@@ -2,7 +2,7 @@
 
 Rule: the LLM never computes numbers.
   * parse_scenario turns plain English into structured events (JSON via structured outputs), which are then
-    validated against the real graph (ids exist, edges exist, demand targets are customers, severity 0..1).
+    validated against the real graph (ids exist, edges exist, demand targets are retailers or customers, severity 0..1).
   * write_playbook rewords numbers the engine already computed into a 5-step plan. Every number in its output
     (other than the "Day N:" step labels) must equal a number in the engine output it was given, or the
     playbook is rejected and the caller uses the deterministic template instead.
@@ -78,7 +78,7 @@ def _call(**kwargs):
 
 
 def _network_brief(G: nx.DiGraph) -> str:
-    nodes = "\n".join(f"- {n}: {d['kind']}, {d.get('name', '')}, {d['city']}" for n, d in G.nodes(data=True))
+    nodes = "\n".join(f"- {n}: {d['kind']}, {d.get('name', '')}, {d.get('city', '')}" for n, d in G.nodes(data=True))
     edges = ", ".join(f"{u}->{v}" for u, v in G.edges())
     return f"Nodes:\n{nodes}\nLanes: {edges}"
 
@@ -91,7 +91,7 @@ def parse_scenario(text: str, G: nx.DiGraph, horizon: int = 30) -> list[Event]:
     system = (
         "You convert supply-chain disruption descriptions into structured events for a simulator. Output JSON only.\n"
         "Event types: 'node' (a site is out or degraded; target = node id), 'edge' (a lane is blocked; target = "
-        "'SRC->DST' using a lane from the list), 'demand' (demand spike at a customer; target = customer id).\n"
+        "'SRC->DST' using a lane from the list), 'demand' (demand spike at a retailer or customer; target = that node's id).\n"
         f"Day 0 is today; the simulation covers days 0-{horizon - 1}. start = first affected day, duration in days, "
         "severity in 0..1 (1 = total outage, or +100% demand). If no timing is given, use start=1, duration=7.\n"
         "Map places to the ids below by city or name. Use only ids and lanes from these lists. If the text does not "

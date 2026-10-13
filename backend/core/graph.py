@@ -1,7 +1,8 @@
 """Network construction. Owner: A.
 
 Graph conventions used by every core module:
-    node attrs: kind, city, lat, lon, capacity (units/day), stock (units), demand (units/day, customers only),
+    node attrs: kind, city, lat, lon, capacity (units/day), stock (units), demand (units/day, demand nodes only:
+                retailers and customers, see node_types),
                 reliability (0..1), name, backup (bool); risk/top_factors are added by the risk layer
     edge attrs: capacity (units/day), lead (days), cost (INR/unit), co2 (kg/unit)
     graph attrs: seed, unit_price (INR per finished unit, used for revenue at risk)
@@ -9,11 +10,12 @@ Graph conventions used by every core module:
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 
 import networkx as nx
 import numpy as np
+
+from node_types import KINDS, TIER, haversine_km, is_demand
 
 DEMO_NETWORK = Path(__file__).resolve().parent.parent / "mock" / "demo_network.json"
 UNIT_PRICE_INR = 4200
@@ -49,13 +51,7 @@ SITES = {
         ("C4", "Hyderabad Retail", "Hyderabad", 17.44, 78.38, False),
     ],
 }
-TIERS = ["supplier", "factory", "warehouse", "customer"]
-
-
-def haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
-    lat1, lon1, lat2, lon2 = map(math.radians, (*a, *b))
-    h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
-    return 2 * 6371 * math.asin(math.sqrt(h))
+TIERS = list(SITES)  # tiers the preset generator builds (no retailers); haversine_km lives in node_types
 
 
 def _nearest(G: nx.DiGraph, node: str, candidates: list[str], k: int) -> list[str]:
@@ -170,9 +166,9 @@ def _check_no_orphans(G: nx.DiGraph) -> None:
     orphans = [n for n in G if G.degree(n) == 0]
     suppliers = [n for n, d in G.nodes(data=True) if d["kind"] == "supplier" and not d.get("backup")]
     reach = set().union(*(nx.descendants(G, s) for s in suppliers))
-    unserved = [n for n, d in G.nodes(data=True) if d["kind"] == "customer" and n not in reach]
+    unserved = [n for n, d in G.nodes(data=True) if is_demand(d["kind"]) and n not in reach]
     if orphans or unserved:
-        raise RuntimeError(f"orphan nodes {orphans}, customers unreachable from primary suppliers {unserved}")
+        raise RuntimeError(f"orphan nodes {orphans}, demand nodes unreachable from primary suppliers {unserved}")
 
 
 def load_network_from_csv(nodes_path: str | Path, edges_path: str | Path) -> tuple[nx.DiGraph, list[str]]:
@@ -189,7 +185,6 @@ def load_network_from_csv(nodes_path: str | Path, edges_path: str | Path) -> tup
 
 NODE_REQUIRED = ["id", "kind", "city", "lat", "lon", "capacity", "stock", "demand"]
 EDGE_REQUIRED = ["source", "target", "capacity", "lead", "cost"]
-KINDS = ["supplier", "factory", "warehouse", "customer"]
 
 
 class GraphDataError(ValueError):
@@ -201,7 +196,7 @@ def graph_from_tables(nodes, edges) -> tuple[nx.DiGraph, list[str]]:
 
     Raises GraphDataError for hard errors (missing columns, bad kinds, duplicate ids, edges to unknown nodes,
     non-numeric values). Returns soft problems as warnings (backwards-tier edges, isolated nodes,
-    customers with no supplier path, missing optional columns).
+    demand nodes (retailers/customers) with no supplier path, missing optional columns).
     """
     import pandas as pd
 
@@ -285,8 +280,7 @@ def graph_from_tables(nodes, edges) -> tuple[nx.DiGraph, list[str]]:
         G.add_edge(row["source"], row["target"], capacity=float(row["capacity"]), lead=float(row["lead"]),
                    cost=float(row["cost"]), co2=float(row["co2"]))
 
-    tier = {k: i for i, k in enumerate(KINDS)}
-    backwards = [f"{u}->{v}" for u, v in G.edges if tier[G.nodes[v]["kind"]] <= tier[G.nodes[u]["kind"]]]
+    backwards = [f"{u}->{v}" for u, v in G.edges if TIER[G.nodes[v]["kind"]] <= TIER[G.nodes[u]["kind"]]]
     if backwards:
         warnings.append(f"{len(backwards)} edge(s) do not flow downstream by tier: {', '.join(backwards[:5])}")
     isolated = [n for n in G if G.degree(n) == 0]
@@ -294,17 +288,19 @@ def graph_from_tables(nodes, edges) -> tuple[nx.DiGraph, list[str]]:
         warnings.append(f"isolated nodes: {', '.join(isolated[:10])}")
     suppliers = [n for n, d in G.nodes(data=True) if d["kind"] == "supplier"]
     reachable = set().union(*(nx.descendants(G, s) for s in suppliers)) if suppliers else set()
-    orphans = [n for n, d in G.nodes(data=True) if d["kind"] == "customer" and n not in reachable]
+    orphans = [n for n, d in G.nodes(data=True) if is_demand(d["kind"]) and n not in reachable]
     if orphans:
-        warnings.append(f"customers with no path from any supplier: {', '.join(orphans)}")
+        kinds = sorted({G.nodes[n]["kind"] + "s" for n in orphans})
+        warnings.append(f"{' and '.join(kinds)} with no path from any supplier: {', '.join(orphans)}")
     return G, warnings
 
 
-def graph_to_payload(G: nx.DiGraph, resilience_score: float) -> dict:
+def graph_to_payload(G: nx.DiGraph, resilience_score: float | None) -> dict:
     """Serialise a graph into the GET /network response shape."""
     nodes = [{"id": nid, **attrs} for nid, attrs in G.nodes(data=True)]
     for n in nodes:
         n.setdefault("top_factors", [])
+        n.setdefault("risk", None)
     edges = [{"source": u, "target": v, **attrs} for u, v, attrs in G.edges(data=True)]
     return {"nodes": nodes, "edges": edges, "resilience_score": resilience_score}
 

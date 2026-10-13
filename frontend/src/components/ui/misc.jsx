@@ -105,3 +105,41 @@ export function Toggle({ pressed, onChange, children, icon: Icon }) {
     </button>
   )
 }
+
+/**
+ * Modal confirmation. Escape or the backdrop cancels; focus starts on the safe (cancel) button.
+ * tone="danger" styles the confirm button for destructive actions.
+ */
+export function ConfirmDialog({ open, title, children, confirmLabel = 'Confirm', tone = 'danger', busy = false, onConfirm, onCancel }) {
+  const cancelRef = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    cancelRef.current?.focus()
+    const onKey = (e) => e.key === 'Escape' && onCancel?.()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onCancel])
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button type="button" aria-label="Cancel" className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[1px]" onClick={onCancel} />
+      <div role="alertdialog" aria-modal="true" aria-label={title} className="relative w-full max-w-md animate-fade-in rounded-card border border-border bg-surface p-5 shadow-card">
+        <h2 className="text-sm font-semibold text-fg">{title}</h2>
+        <div className="mt-2 text-sm text-fg-2">{children}</div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button ref={cancelRef} onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            variant={tone === 'danger' ? 'secondary' : 'primary'}
+            className={tone === 'danger' ? 'border-bad/40 text-bad hover:border-bad hover:bg-bad/10' : ''}
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {busy ? 'Working…' : confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}

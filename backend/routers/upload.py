@@ -26,7 +26,7 @@ async def _read_csv(f: UploadFile, label: str) -> pd.DataFrame:
 async def upload(
     nodes: UploadFile = File(..., description="nodes.csv: id,kind,city,lat,lon,capacity,stock,demand[,name,reliability,utilization,backup,risk]"),
     edges: UploadFile = File(..., description="edges.csv: source,target,capacity,lead,cost[,co2]"),
-    activate: bool = Query(False, description="use this network for core/ (non-mock) routers until restart"),
+    activate: bool = Query(False, description="make this the active network (source = csv) for every tab"),
 ):
     try:
         G, warnings = graph_from_tables(await _read_csv(nodes, "nodes.csv"), await _read_csv(edges, "edges.csv"))

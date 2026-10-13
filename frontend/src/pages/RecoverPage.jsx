@@ -10,15 +10,16 @@ import Playbook from '../components/Playbook.jsx'
 import GraphPanel from '../components/GraphPanel.jsx'
 
 export default function RecoverPage() {
-  const { events, recover, recoverFor, runRecover, loading, setTab, network } = useStore()
+  const { events, recover, recoverFor, runRecover, loading, errors, setTab, network } = useStore()
   const toast = useToast()
   const [view, setView] = useState('after')
   const stale = recover && JSON.stringify(recoverFor) !== JSON.stringify(events)
 
   useEffect(() => {
-    if (events.length && (!recover || stale) && !loading.recover) runRecover(events)
+    // first visit, a changed scenario, or results dropped because the network changed
+    if (events.length && (!recover || stale) && !loading.recover && !errors.recover) runRecover(events)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [recover])
 
   const recompute = async () => {
     const res = await runRecover(events)

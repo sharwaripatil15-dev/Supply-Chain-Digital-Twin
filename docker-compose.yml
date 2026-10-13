@@ -28,6 +28,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       REDIS_URL: redis://redis:6379/0
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      AEGIS_DATA_DIR: /app/data
+    volumes:
+      - aegis-data:/app/data  # the active network (manual builder / activated CSV) survives restarts
       # DATABASE_URL: postgresql://aegis:aegis@postgres:5432/aegis
       # NEO4J_URI: bolt://neo4j:7687
     depends_on:
@@ -73,6 +76,7 @@ services:
   #   volumes:
   #     - neo4jdata:/data
 
-# volumes:
-#   pgdata:
-#   neo4jdata:
+volumes:
+  aegis-data:
+  # pgdata:
+  # neo4jdata:

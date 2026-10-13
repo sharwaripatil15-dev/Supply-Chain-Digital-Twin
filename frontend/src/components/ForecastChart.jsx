@@ -12,11 +12,11 @@ export default function ForecastChart() {
   const t = useTokens()
   const [cust, setCust] = useState(null)
   useEffect(() => {
-    if (!forecast && !loading.forecast) loadForecast()
+    if (!forecast && !loading.forecast && !errors.forecast) loadForecast() // reloads after the network changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [forecast])
 
-  const selected = forecast?.customers.find((c) => c.id === cust) || forecast?.customers[0]
+  const selected = forecast?.customers?.find((c) => c.id === cust) || forecast?.customers?.[0]
   const data = useMemo(() => {
     if (!selected) return []
     return [
@@ -30,12 +30,12 @@ export default function ForecastChart() {
     <Card>
       <CardHeader
         title="Demand forecast"
-        description={forecast ? forecast.method : 'Per-customer history and forecast'}
+        description={forecast ? forecast.method : 'Per demand point (retailers and customers): history and forecast'}
         icon={LineChart}
         actions={
-          forecast && (
+          forecast?.customers?.length > 0 && (
             <>
-              <select className="input h-8 w-auto py-0 text-xs" value={selected?.id} onChange={(e) => setCust(e.target.value)} aria-label="Customer">
+              <select className="input h-8 w-auto py-0 text-xs" value={selected?.id} onChange={(e) => setCust(e.target.value)} aria-label="Demand point">
                 {forecast.customers.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.id} · {nameOf(c.id)}
@@ -50,7 +50,8 @@ export default function ForecastChart() {
       <CardBody>
         <InlineError message={errors.forecast} onRetry={loadForecast} />
         {loading.forecast && !forecast && <Skeleton className="h-[220px] w-full" />}
-        {forecast && (
+        {forecast && !forecast.customers?.length && <p className="py-8 text-center text-sm text-fg-muted">No demand points with demand in this network.</p>}
+        {forecast?.customers?.length > 0 && (
           <>
             <ResponsiveContainer width="100%" height={220}>
               <ComposedChart data={data} margin={{ top: 16, right: 8, left: -14, bottom: 0 }}>

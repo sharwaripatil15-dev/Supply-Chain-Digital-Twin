@@ -4,8 +4,8 @@ const token = (name) => `rgb(var(--${name}) / <alpha-value>)`
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   darkMode: 'class',
-  // status swatches are composed from STATUS tokens at runtime (bg-${token})
-  safelist: ['bg-ok', 'bg-warn', 'bg-bad'],
+  // status swatches and node-type swatches are composed at runtime (bg-${token}, bg-tier-${kind})
+  safelist: ['bg-ok', 'bg-warn', 'bg-bad', { pattern: /^(bg|text|border)-tier-(supplier|factory|warehouse|retailer|customer)$/ }],
   theme: {
     // Type scale: 12 / 14 / 16 / 20 / 28
     fontSize: {
@@ -29,6 +29,7 @@ export default {
           supplier: token('tier-supplier'),
           factory: token('tier-factory'),
           warehouse: token('tier-warehouse'),
+          retailer: token('tier-retailer'),
           customer: token('tier-customer'),
         },
         map: token('map-bg'),
