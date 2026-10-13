@@ -5,12 +5,22 @@ import { eventLabel, fmtNum } from '../format.js'
 import { isDemand, typeOf } from '../lib/nodeTypes.js'
 import { Button, Card, CardBody, CardHeader, InlineError, SegmentedControl, cn, useToast } from './ui/index.js'
 
-const TYPE_ICON = { node: Building2, edge: Route, demand: TrendingUp }
+const TYPE_ICON = {
+  node: Building2,
+  capacity_drop: Building2,
+  node_freeze: Building2,
+  edge: Route,
+  route_block: Route,
+  demand: TrendingUp,
+  demand_surge: TrendingUp,
+}
 
 function targetOptions(network, type) {
   if (!network) return []
-  if (type === 'edge') return (network.edges ?? []).map((e) => ({ value: `${e.source}->${e.target}`, label: `${e.source} → ${e.target}` }))
-  const nodes = type === 'demand' ? (network.nodes ?? []).filter((n) => isDemand(n.kind)) : network.nodes ?? []
+  const isEdge = type === 'edge' || type === 'route_block'
+  if (isEdge) return (network.edges ?? []).map((e) => ({ value: `${e.source}->${e.target}`, label: `${e.source} → ${e.target}` }))
+  const isDem = type === 'demand' || type === 'demand_surge'
+  const nodes = isDem ? (network.nodes ?? []).filter((n) => isDemand(n.kind)) : network.nodes ?? []
   return nodes.map((n) => ({ value: n.id, label: `${n.id} · ${n.name || n.city} (${typeOf(n.kind).label.toLowerCase()})` }))
 }
 
@@ -23,12 +33,13 @@ function EventEditor({ ev, network, onChange }) {
     if (k === 'type') next.target = targetOptions(network, v)[0]?.value || ''
     onChange(next)
   }
+  const normType = ['capacity_drop', 'node_freeze'].includes(ev.type) ? 'node' : ev.type === 'route_block' ? 'edge' : ev.type === 'demand_surge' ? 'demand' : ev.type
   return (
     <div className="space-y-3 rounded-lg border border-border bg-surface-2/50 p-3">
       <SegmentedControl
         size="sm"
         label="Event type"
-        value={ev.type}
+        value={normType}
         onChange={(v) => set('type', v)}
         className="w-full [&>button]:flex-1"
         options={[
@@ -115,7 +126,7 @@ export default function ScenarioPanel() {
           ) : (
             <ul className="mb-3 flex flex-wrap gap-1.5">
               {events.map((e, i) => {
-                const Icon = TYPE_ICON[e.type]
+                const Icon = TYPE_ICON[e.type] || Building2
                 return (
                   <li key={i}>
                     <span

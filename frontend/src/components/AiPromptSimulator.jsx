@@ -77,9 +77,10 @@ export default function AiPromptSimulator() {
   const [activeStep, setActiveStep] = useState('input') // 'input' | 'review' | 'simulated'
 
   // Step 1: Human triggers AI / Rule parsing (no simulation yet)
-  const handleParse = async () => {
-    if (!text.trim() || loading.parse) return
-    const res = await parseText(text.trim())
+  const handleParse = async (overrideText) => {
+    const query = (typeof overrideText === 'string' ? overrideText : text).trim()
+    if (!query || loading.parse) return
+    const res = await parseText(query)
     if (res && res.events) {
       setParseResponse(res)
       setEditableEvents(res.events)
@@ -262,7 +263,7 @@ export default function AiPromptSimulator() {
                   type="button"
                   onClick={() => {
                     setText(item.prompt)
-                    handleParse()
+                    handleParse(item.prompt)
                   }}
                   className={cn(
                     'group flex flex-col justify-between rounded-lg border p-2.5 text-left text-xs transition-all',
@@ -379,8 +380,16 @@ export default function AiPromptSimulator() {
                               {opt.label}
                             </option>
                           ))}
-                          {ev.target.includes('->') && (
+                          {Boolean(ev.target && typeof ev.target === 'string' && ev.target.includes('->')) && (
                             <option value={ev.target}>{ev.target} (Corridor Lane)</option>
+                          )}
+                          {Boolean(
+                            ev.target &&
+                              typeof ev.target === 'string' &&
+                              !NODE_OPTIONS.some((o) => o.id === ev.target) &&
+                              !ev.target.includes('->')
+                          ) && (
+                            <option value={ev.target}>{ev.target}</option>
                           )}
                         </select>
                       </div>
@@ -503,7 +512,7 @@ export default function AiPromptSimulator() {
                   <div>
                     <span className="text-fg-muted">Projected Baseline Unmet Demand:</span>
                     <div className="mt-1 text-2xl font-black text-fg font-mono">
-                      {Math.round(quickRisk.predicted_unmet_share * 100)}%
+                      {Math.round((quickRisk.predicted_unmet_share ?? 0) * 100)}%
                     </div>
                     <p className="text-[11px] text-fg-muted">
                       Predicted by ML surrogate prior to full physical solver.
@@ -516,8 +525,8 @@ export default function AiPromptSimulator() {
                       {quickRisk.top_factors?.map((f, i) => (
                         <div key={i} className="flex items-center justify-between text-[11px] bg-surface-2 rounded px-2 py-0.5">
                           <span className="font-mono text-fg-2">{f.feature}</span>
-                          <span className={cn('font-mono font-semibold', f.impact > 0 ? 'text-bad' : 'text-ok')}>
-                            {f.impact > 0 ? '+' : ''}{f.impact.toFixed(3)}
+                          <span className={cn('font-mono font-semibold', (f.impact || 0) > 0 ? 'text-bad' : 'text-ok')}>
+                            {(f.impact || 0) > 0 ? '+' : ''}{Number(f.impact || 0).toFixed(3)}
                           </span>
                         </div>
                       ))}
@@ -641,19 +650,19 @@ export default function AiPromptSimulator() {
                   <div className="bg-surface-2 rounded-lg p-2">
                     <div className="text-[11px] text-fg-muted">Surrogate Predicted Share</div>
                     <div className="text-base font-bold text-accent font-mono mt-0.5">
-                      {Math.round(surrogateComp.predicted_unmet_share * 100)}%
+                      {Math.round((surrogateComp.predicted_unmet_share ?? 0) * 100)}%
                     </div>
                   </div>
                   <div className="bg-surface-2 rounded-lg p-2">
                     <div className="text-[11px] text-fg-muted">Actual Simulated LP Share</div>
                     <div className="text-base font-bold text-fg font-mono mt-0.5">
-                      {Math.round(surrogateComp.actual_unmet_share * 100)}%
+                      {Math.round((surrogateComp.actual_unmet_share ?? 0) * 100)}%
                     </div>
                   </div>
                   <div className="bg-surface-2 rounded-lg p-2">
                     <div className="text-[11px] text-fg-muted">Absolute Surrogate Error</div>
                     <div className="text-base font-bold text-ok font-mono mt-0.5">
-                      {(surrogateComp.absolute_error * 100).toFixed(1)}%
+                      {((surrogateComp.absolute_error ?? 0) * 100).toFixed(1)}%
                     </div>
                   </div>
                 </div>

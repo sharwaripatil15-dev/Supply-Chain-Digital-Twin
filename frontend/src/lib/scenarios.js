@@ -8,7 +8,11 @@ export function eventsFit(network, events) {
   if (!network || !events?.length) return false
   const kind = Object.fromEntries((network.nodes || []).map((n) => [n.id, n.kind]))
   const lanes = new Set((network.edges || []).map(edgeKey))
-  return events.every((e) => (e.type === 'edge' ? lanes.has(e.target) : e.type === 'demand' ? isDemand(kind[e.target]) : e.target in kind))
+  return events.every((e) => {
+    const isEdge = e.type === 'edge' || e.type === 'route_block'
+    const isDem = e.type === 'demand' || e.type === 'demand_surge'
+    return isEdge ? lanes.has(e.target) : isDem ? isDemand(kind[e.target]) : e.target in kind
+  })
 }
 
 /**

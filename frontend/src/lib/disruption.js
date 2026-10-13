@@ -12,9 +12,15 @@ export function disruptionForDay(network, events, day, statuses) {
   if (statuses) {
     for (const [id, s] of Object.entries(statuses)) if (s === 'down') nodes.add(id)
   } else {
-    for (const e of events) if (e.type === 'node' && e.severity >= 1 && active(e, day)) nodes.add(e.target)
+    for (const e of events) {
+      const isNode = e.type === 'node' || e.type === 'capacity_drop' || e.type === 'node_freeze'
+      if (isNode && e.severity >= 1 && active(e, day)) nodes.add(e.target)
+    }
   }
-  for (const e of events) if (e.type === 'edge' && active(e, day)) edges.add(e.target)
+  for (const e of events) {
+    const isEdge = e.type === 'edge' || e.type === 'route_block'
+    if (isEdge && active(e, day)) edges.add(e.target)
+  }
   for (const ed of network?.edges ?? []) {
     if (nodes.has(ed.source) || nodes.has(ed.target)) edges.add(`${ed.source}->${ed.target}`)
   }
@@ -23,8 +29,16 @@ export function disruptionForDay(network, events, day, statuses) {
 
 /** Every event at full effect (used for "after" views without a timeline). */
 export function peakDisruption(network, events) {
-  const nodes = new Set(events.filter((e) => e.type === 'node' && e.severity >= 1).map((e) => e.target))
-  const edges = new Set(events.filter((e) => e.type === 'edge').map((e) => e.target))
+  const nodes = new Set(
+    events
+      .filter((e) => (e.type === 'node' || e.type === 'capacity_drop' || e.type === 'node_freeze') && e.severity >= 1)
+      .map((e) => e.target),
+  )
+  const edges = new Set(
+    events
+      .filter((e) => e.type === 'edge' || e.type === 'route_block')
+      .map((e) => e.target),
+  )
   for (const ed of network?.edges ?? []) {
     if (nodes.has(ed.source) || nodes.has(ed.target)) edges.add(`${ed.source}->${ed.target}`)
   }
