@@ -269,6 +269,113 @@ def _score(G: nx.DiGraph, top_k: int) -> dict[str, dict]:
     return out
 
 
+def _load_risk_thresholds() -> tuple[float, float]:
+    import json
+    assumptions_path = Path(__file__).resolve().parent.parent / "config" / "assumptions.json"
+    if assumptions_path.exists():
+        try:
+            with open(assumptions_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                rt = data.get("risk_thresholds", {})
+                return float(rt.get("high_risk_unmet_share", 0.35)), float(rt.get("moderate_risk_unmet_share", 0.10))
+        except Exception:
+            pass
+    return 0.35, 0.10
+
+
+def scenario_quick_risk(G: nx.DiGraph, events: Iterable[Any]) -> Any | None:
+    """Predict instantaneous scenario risk using the trained XGBoost surrogate and SHAP TreeExplainer."""
+    from schemas import QuickRiskEstimate, QuickRiskFactor
+
+    events = list(events)
+    if not events:
+        return None
+    t0 = time.perf_counter()
+    try:
+        node_scores = node_risk_with_shap(G, top_k=3)
+    except Exception:
+        return None
+
+    high_thresh, mod_thresh = _load_risk_thresholds()
+
+    # Collect affected nodes
+    disrupted_nodes = []
+    for ev in events:
+        target = getattr(ev, "target", "")
+        ev_type = getattr(ev, "type", "")
+        if ev_type in ("edge", "route_block"):
+            parts = target.split("->")
+            if len(parts) == 2:
+                disrupted_nodes.append(parts[1].strip())
+        else:
+            disrupted_nodes.append(target)
+
+    valid_scores = [
+        node_scores.get(n) for n in disrupted_nodes if n in node_scores and node_scores.get(n, {}).get("risk") is not None
+    ]
+    if not valid_scores:
+        return None
+
+    # Estimate combined unmet share: 1 - prod(1 - r_i)
+    combined_risk = 1.0
+    for s in valid_scores:
+        r = s.get("risk", 0.0) or 0.0
+        combined_risk *= (1.0 - r)
+    pred_unmet = round(float(np.clip(1.0 - combined_risk, 0.0, 1.0)), 3)
+
+    if pred_unmet >= high_thresh:
+        level = "High"
+    elif pred_unmet >= mod_thresh:
+        level = "Moderate"
+    else:
+        level = "Low"
+
+    # Aggregate top SHAP factors across the affected nodes
+    factor_map: dict[str, float] = {}
+    for s in valid_scores:
+        for f in s.get("top_factors", []):
+            feat = f["feature"]
+            impact = f["impact"]
+            factor_map[feat] = factor_map.get(feat, 0.0) + impact
+
+    top_factors = [
+        QuickRiskFactor(feature=feat, impact=round(imp, 4))
+        for feat, imp in sorted(factor_map.items(), key=lambda x: -abs(x[1]))[:3]
+    ]
+
+    elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+
+    return QuickRiskEstimate(
+        risk_level=level,
+        predicted_unmet_share=pred_unmet,
+        top_factors=top_factors,
+        label="estimate",
+        latency_ms=elapsed_ms,
+    )
+
+
+def surrogate_compare(predicted_unmet: float, actual_unmet_share: float) -> Any:
+    """Compare the pre-simulation surrogate estimate with actual LP simulation results."""
+    from schemas import SurrogateComparison
+
+    high_thresh, mod_thresh = _load_risk_thresholds()
+    if predicted_unmet >= high_thresh:
+        level = "High"
+    elif predicted_unmet >= mod_thresh:
+        level = "Moderate"
+    else:
+        level = "Low"
+
+    error = round(abs(predicted_unmet - actual_unmet_share), 4)
+    return SurrogateComparison(
+        predicted_risk_level=level,
+        predicted_unmet_share=round(predicted_unmet, 3),
+        actual_unmet_share=round(actual_unmet_share, 3),
+        absolute_error=error,
+        label="Surrogate vs Simulated LP comparison",
+    )
+
+
 if __name__ == "__main__":
     t0 = time.perf_counter()
     b = train_surrogate()

@@ -8,7 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validat
 from node_types import ALL_TYPE_FIELDS, TYPE_FIELDS, NodeKind, TransportMode, is_demand
 
 NodeStatus = Literal["ok", "stressed", "down"]
-EventType = Literal["node", "edge", "demand"]
+EventType = Literal[
+    "node", "edge", "demand",
+    "capacity_drop", "node_freeze", "route_block", "demand_surge",
+]
 
 
 # ---------------------------------------------------------------- network
@@ -61,11 +64,41 @@ class NetworkResponse(BaseModel):
 
 # ---------------------------------------------------------------- scenario
 class Event(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     type: EventType
     target: str = Field(description='node id, or "SRC->DST" for an edge event')
-    start: int = Field(ge=0, description="day the disruption begins")
-    duration: int = Field(ge=1, le=365, description="days")
-    severity: float = Field(ge=0, le=1, description="0 = no effect, 1 = total outage / +100% demand")
+    start: int = Field(default=0, ge=0, description="day the disruption begins")
+    duration: int = Field(default=7, ge=1, le=365, description="days")
+    start_day: int | None = Field(default=None, ge=0)
+    duration_days: int | None = Field(default=None, ge=1, le=365)
+    severity: float = Field(ge=0, le=3.0, description="0 = no effect, 1 = total outage; 1..3 for demand surge multiplier")
+    justification: str | None = Field(default=None, description="Domain reason or calibrated assumption")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sync_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "start_day" in data and "start" not in data:
+                data["start"] = data["start_day"]
+            elif "start" in data and "start_day" not in data:
+                data["start_day"] = data["start"]
+            if "duration_days" in data and "duration" not in data:
+                data["duration"] = data["duration_days"]
+            elif "duration" in data and "duration_days" not in data:
+                data["duration_days"] = data["duration"]
+        return data
+
+    @model_validator(mode="after")
+    def _normalize_event(self) -> Event:
+        if self.start_day is None:
+            self.start_day = self.start
+        if self.duration_days is None:
+            self.duration_days = self.duration
+        if self.type in ("node", "edge", "capacity_drop", "node_freeze", "route_block"):
+            if self.severity > 1.0:
+                raise ValueError(f"Severity for {self.type} must be <= 1.0 (got {self.severity})")
+        return self
 
 
 class SimulateRequest(BaseModel):
@@ -93,6 +126,40 @@ class Bottleneck(BaseModel):
     day: int | None = Field(default=None, description="day the peak occurs")
 
 
+class CascadeNodeImpact(BaseModel):
+    node: str
+    name: str | None = None
+    city: str | None = None
+    kind: str
+    first_impact_day: int
+    tts_days: float = Field(description="Time-to-survive: days of stock before stockout")
+    ttr_days: float = Field(description="Time-to-recover: days until supply restores + replenishment transit")
+    status: Literal["survives", "fails"] = Field(description="'survives' if TTS >= TTR, else 'fails'")
+    mode: str = Field(default="quick estimate", description="Labeled as 'quick estimate' or 'simulated'")
+    reason: str | None = None
+
+
+class QuickRiskFactor(BaseModel):
+    feature: str
+    impact: float = Field(description="SHAP attribution impact")
+
+
+class QuickRiskEstimate(BaseModel):
+    risk_level: Literal["High", "Moderate", "Low"]
+    predicted_unmet_share: float = Field(ge=0, le=1)
+    top_factors: list[QuickRiskFactor] = []
+    label: str = Field(default="estimate", description="Labeled as an ML surrogate estimate")
+    latency_ms: float | None = Field(default=None, description="Inference latency in milliseconds")
+
+
+class SurrogateComparison(BaseModel):
+    predicted_risk_level: Literal["High", "Moderate", "Low"]
+    predicted_unmet_share: float
+    actual_unmet_share: float
+    absolute_error: float
+    label: str = Field(default="Surrogate vs Simulated LP comparison")
+
+
 class SimulateResponse(BaseModel):
     timeline: list[TimelineDay]
     log: list[str]
@@ -102,6 +169,9 @@ class SimulateResponse(BaseModel):
     revenue_at_risk: float = Field(description="INR")
     delay: Delay
     bottlenecks: list[Bottleneck] = Field(description="nodes whose utilization exceeds 90%")
+    surrogate_comparison: SurrogateComparison | None = None
+    cascade_simulated: list[CascadeNodeImpact] = []
+    top_recovery_options: list[dict[str, Any]] = []
 
 
 class MonteCarloRequest(BaseModel):
@@ -178,6 +248,15 @@ class AlternateSupplier(BaseModel):
     cost_premium_pct: float
     reliability: float = Field(ge=0, le=1)
     reason: str | None = Field(default=None, description="why this alternate ranks where it does")
+    score: float | None = Field(default=None, description="combined ranking score (lower is better)")
+    is_backup: bool = Field(default=False, description="whether this candidate is a dedicated backup facility")
+
+
+class RouteWaypoint(BaseModel):
+    id: str
+    name: str
+    city: str
+    kind: str
 
 
 class AlternateRoute(BaseModel):
@@ -189,6 +268,21 @@ class AlternateRoute(BaseModel):
     spare_capacity: float
     extra_lead_days: float = Field(description="delay delta: new path lead - old path lead (days)")
     extra_cost_per_unit: float = Field(description="cost delta: new path - old path (INR/unit)")
+    waypoints: list[RouteWaypoint] = []
+    old_waypoints: list[RouteWaypoint] = []
+
+
+class AlternatesRequest(BaseModel):
+    events: list[Event] = Field(default_factory=list)
+    down_suppliers: list[str] = Field(default_factory=list)
+    down_lanes: list[str] = Field(default_factory=list)
+
+
+class AlternatesResponse(BaseModel):
+    alternate_suppliers: list[AlternateSupplier]
+    alternate_routes: list[AlternateRoute]
+    disrupted_suppliers: list[str]
+    disrupted_lanes: list[str]
 
 
 class InventoryAction(BaseModel):
@@ -226,6 +320,13 @@ class ParseRequest(BaseModel):
 
 class ParseResponse(BaseModel):
     events: list[Event]
+    interpreted_narrative: str = Field(default="", description="Plain-English explanation of parsed scenario")
+    ambiguities: list[str] = Field(default_factory=list, description="Ambiguous node/city mappings flagged for human confirmation")
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    source: Literal["llm", "rules"] = Field(default="rules")
+    suggested_followups: list[str] = Field(default_factory=list)
+    cascade_preview: list[CascadeNodeImpact] = Field(default_factory=list, description="Labeled as 'quick estimate'")
+    ml_quick_risk: QuickRiskEstimate | None = None
 
 
 # ---------------------------------------------------------------- forecast / surrogate
@@ -508,4 +609,119 @@ class AdvisoryResponse(BaseModel):
     summary: AdvisorySummary
     bottlenecks: list[BottleneckItem]
     recommendations: list[RecommendationItem]
+
+
+# ---------------------------------------------------------------- Inventory & Production Plan Optimization
+class DailyInventoryPoint(BaseModel):
+    day: int
+    warehouse_stock: float
+    factory_stock: float
+    safety_buffer: float
+    stock_drawn: float
+    unmet_demand: float
+
+
+class PlantAllocation(BaseModel):
+    factory_id: str
+    name: str
+    city: str
+    baseline_capacity: float
+    disrupted_capacity: float
+    overtime_units: float
+    shifted_out: float
+    shifted_in: float
+    net_output: float
+    utilization_pct: float
+
+
+class OptimizationFinancialSummary(BaseModel):
+    fix_cost: float
+    inaction_loss: float
+    net_savings: float
+    units_saved: float
+    roi_multiple: float
+    unmet_reduction_pct: float
+
+
+class OptimizePlanRequest(BaseModel):
+    events: list[Event] = Field(default_factory=list)
+    levers: list[str] = Field(default_factory=lambda: ["reroute", "backup", "overtime", "safety_stock", "production_shift"])
+    horizon: int = Field(default=30, ge=1, le=90)
+    w_unmet: float = Field(default=10000.0)
+    w_co2: float = Field(default=4.0)
+
+
+class OptimizePlanResponse(BaseModel):
+    status: str
+    levers: list[str]
+    window: list[int] | None = None
+    cost: float
+    unmet: float
+    stock_drawn: float
+    recovery_days: int
+    co2: float
+    backup_used: bool
+    inventory_actions: list[InventoryAction]
+    production_actions: list[ProductionAction]
+    financial_summary: OptimizationFinancialSummary
+    daily_inventory_trajectory: list[DailyInventoryPoint]
+    plant_allocations: list[PlantAllocation]
+
+
+# ---------------------------------------------------------------- Unified Disruption & Recovery Dashboard
+class DashboardDisruptionItem(BaseModel):
+    type: str
+    target: str
+    target_name: str
+    city: str
+    start: int
+    duration: int
+    severity: float
+    description: str
+
+
+class DashboardCustomerImpact(BaseModel):
+    customer_id: str
+    name: str
+    city: str
+    baseline_demand: float
+    unmet_units: float
+    fulfillment_pct: float
+    extra_lead_days: float
+
+
+class DashboardDisruptionSummary(BaseModel):
+    active_events_count: int
+    affected_nodes: list[str]
+    affected_lanes: list[str]
+    disruptions: list[DashboardDisruptionItem]
+
+
+class DashboardImpactSummary(BaseModel):
+    total_demand: float
+    total_unmet_units: float
+    fulfillment_rate_pct: float
+    inaction_loss_inr: float
+    survival_clock_days: int
+    avg_delay_days: float
+    regional_impacts: list[DashboardCustomerImpact]
+
+
+class DashboardStrategySummary(BaseModel):
+    recommended_strategy: str
+    inaction_loss: float
+    fix_cost: float
+    net_savings: float
+    roi_multiple: float
+    safety_check_passed: bool
+    strategies: list[Strategy]
+    playbook_highlights: list[str]
+
+
+class DashboardSummaryResponse(BaseModel):
+    disruptions: DashboardDisruptionSummary
+    impacts: DashboardImpactSummary
+    recovery: DashboardStrategySummary
+
+
 

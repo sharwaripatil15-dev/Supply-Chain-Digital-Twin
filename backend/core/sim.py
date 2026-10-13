@@ -153,21 +153,25 @@ def _active_state(events: list[Event], day: int, baseline: Mapping[str, list[flo
     for ev in events:
         if not ev.start <= day < ev.start + ev.duration:
             continue
-        if ev.type == "node":
-            node_f[ev.target] = min(node_f.get(ev.target, 1.0), 1.0 - ev.severity)
-        elif ev.type == "edge":
+        if ev.type in ("node", "capacity_drop", "node_freeze"):
+            sev = min(ev.severity, 1.0)
+            node_f[ev.target] = min(node_f.get(ev.target, 1.0), 1.0 - sev)
+        elif ev.type in ("edge", "route_block"):
             u, v = (p.strip() for p in ev.target.split("->"))
-            edge_f[(u, v)] = min(edge_f.get((u, v), 1.0), 1.0 - ev.severity)
+            sev = min(ev.severity, 1.0)
+            edge_f[(u, v)] = min(edge_f.get((u, v), 1.0), 1.0 - sev)
         else:
             series = (baseline or {}).get(ev.target)
             base = series[min(day, len(series) - 1)] if series else 1.0
-            mult[ev.target] = max(mult.get(ev.target, 0.0), base * (1.0 + ev.severity))
+            # If severity is already a multiplier like 1.45, surge is 0.45; else ev.severity
+            surge = ev.severity - 1.0 if ev.severity >= 1.0 else ev.severity
+            mult[ev.target] = max(mult.get(ev.target, 0.0), base * (1.0 + surge))
     return node_f, edge_f, mult
 
 
 def spike_baseline(G: nx.DiGraph, events: list[Event], horizon: int) -> dict[str, list[float]] | None:
     """Forecast-based demand baseline, computed only when a scenario has a demand spike."""
-    if not any(ev.type == "demand" for ev in events):
+    if not any(ev.type in ("demand", "demand_surge") for ev in events):
         return None
     from core.forecast import demand_ratio  # local import: forecast -> chaos -> sim
 
@@ -175,7 +179,16 @@ def spike_baseline(G: nx.DiGraph, events: list[Event], horizon: int) -> dict[str
 
 
 def _describe(ev: Event) -> str:
-    what = {"node": "outage at", "edge": "lane blocked:", "demand": "demand spike at"}[ev.type]
+    desc_map = {
+        "node": "outage at",
+        "capacity_drop": "capacity drop at",
+        "node_freeze": "complete freeze at",
+        "edge": "lane blocked:",
+        "route_block": "corridor blocked:",
+        "demand": "demand spike at",
+        "demand_surge": "demand surge at",
+    }
+    what = desc_map.get(ev.type, "disruption at")
     return f"{what} {ev.target} for {ev.duration}d (severity {ev.severity:.2f})"
 
 

@@ -331,11 +331,21 @@ def playbook() -> list[str]:
 
 # ------------------------------------------------------------------ /parse
 def parse(text: str) -> dict:
-    # Mock: a fixed, sensible scenario regardless of the input text.
-    return {"events": [
-        {"type": "node", "target": "S2", "start": 2, "duration": 10, "severity": 1.0},
-        {"type": "demand", "target": "C3", "start": 5, "duration": 7, "severity": 0.4},
-    ]}
+    from llm.parser import parse_by_rules
+    from routers.deps import get_graph
+    try:
+        return parse_by_rules(text, get_graph())
+    except Exception:
+        return {
+            "events": [
+                {"type": "node", "target": "S2", "start": 2, "duration": 10, "severity": 1.0, "justification": "Mock fallback: S2 outage"},
+                {"type": "demand", "target": "C3", "start": 5, "duration": 7, "severity": 0.4, "justification": "Mock fallback: C3 demand surge"},
+            ],
+            "interpreted_narrative": "Default demo scenario (S2 outage + C3 demand surge)",
+            "ambiguities": [],
+            "confidence": 0.8,
+            "source": "rules",
+        }
 
 
 # ------------------------------------------------------------------ /forecast

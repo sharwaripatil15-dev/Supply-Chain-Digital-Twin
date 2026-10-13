@@ -37,8 +37,13 @@ class Settings:
     mock_recover: bool = field(default_factory=lambda: _mock("RECOVER"))  # /recover
     mock_parse: bool = field(default_factory=lambda: _mock("PARSE"))  # /parse
 
+    llm_provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "claude").lower())
+    gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
+    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
     anthropic_api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
     anthropic_model: str = field(default_factory=lambda: os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5"))
+    llm_timeout_seconds: float = field(default_factory=lambda: float(os.getenv("LLM_TIMEOUT_SECONDS", "8.0")))
+    max_prompt_chars: int = field(default_factory=lambda: int(os.getenv("MAX_PROMPT_CHARS", "500")))
     redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", ""))
     cache_ttl_seconds: int = field(default_factory=lambda: int(os.getenv("CACHE_TTL_SECONDS", "300")))
     cors_origins: list[str] = field(

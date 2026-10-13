@@ -1,0 +1,72 @@
+{
+  "version": "1.0.0",
+  "comment": "Calibrated assumptions for Indian MSME supply-chain disruption simulation. Explicitly labeled as domain heuristics.",
+  "disruptions": {
+    "monsoon": {
+      "type": "capacity_drop",
+      "severity": 0.85,
+      "default_duration_days": 10,
+      "label": "Calibrated assumption: monsoon flooding causes 85% capacity drop for 10 days"
+    },
+    "flood": {
+      "type": "capacity_drop",
+      "severity": 0.85,
+      "default_duration_days": 10,
+      "label": "Calibrated assumption: flooding causes 85% capacity drop for 10 days"
+    },
+    "cyclone": {
+      "type": "capacity_drop",
+      "severity": 0.90,
+      "default_duration_days": 7,
+      "label": "Calibrated assumption: cyclone disruption causes 90% capacity drop for 7 days"
+    },
+    "strike": {
+      "type": "node_freeze",
+      "severity": 1.0,
+      "default_duration_days": 5,
+      "label": "Calibrated assumption: transport/labor strike halts 100% throughput for 5 days"
+    },
+    "blockade": {
+      "type": "route_block",
+      "severity": 1.0,
+      "default_duration_days": 5,
+      "label": "Calibrated assumption: road blockade freezes corridor for 5 days"
+    },
+    "fire": {
+      "type": "capacity_drop",
+      "severity": 0.90,
+      "default_duration_days": 14,
+      "label": "Calibrated assumption: industrial fire halts 90% capacity for 14 days"
+    },
+    "breakdown": {
+      "type": "capacity_drop",
+      "severity": 0.75,
+      "default_duration_days": 6,
+      "label": "Calibrated assumption: machinery breakdown reduces capacity by 75% for 6 days"
+    },
+    "festival": {
+      "type": "demand_surge",
+      "severity": 1.45,
+      "default_duration_days": 7,
+      "label": "Calibrated assumption: festival/e-commerce sale creates 45% surge (1.45x multiplier) for 7 days"
+    },
+    "surge": {
+      "type": "demand_surge",
+      "severity": 1.35,
+      "default_duration_days": 7,
+      "label": "Calibrated assumption: demand surge creates 35% surge (1.35x multiplier) for 7 days"
+    },
+    "default_drop": {
+      "type": "capacity_drop",
+      "severity": 0.70,
+      "default_duration_days": 7,
+      "label": "Calibrated assumption: generic disruption reduces capacity by 70% for 7 days"
+    }
+  },
+  "risk_thresholds": {
+    "high_risk_unmet_share": 0.35,
+    "moderate_risk_unmet_share": 0.10
+  },
+  "overlapping_event_rule": "conservative_worst_case",
+  "overlapping_event_rule_description": "When multiple events affect the same node, take the minimum remaining capacity factor min(1 - s1, 1 - s2) and span the union of start..start+duration."
+}
