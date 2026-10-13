@@ -6,7 +6,7 @@ from core import recommend as rec_core
 from core import strategies as strat_core
 from llm.parser import LLMUnavailable, write_playbook
 from mock import mock_data
-from routers.deps import check_events, get_graph
+from routers.deps import cache_scope, check_events, get_graph, require_runnable, use_mock
 from schemas import RecoverRequest, RecoverResponse
 
 router = APIRouter(tags=["recover"])
@@ -37,6 +37,9 @@ def _live_recover(events) -> dict:
 
 @router.post("/recover", response_model=RecoverResponse)
 def recover(req: RecoverRequest):
-    events = check_events(req.events, mock=settings.mock_recover)
-    compute = mock_data.recover if settings.mock_recover else _live_recover
-    return cache.get_or_compute(cache.key("recover", [settings.mock_recover, req]), lambda: compute(events))
+    mock = use_mock(settings.mock_recover)
+    if not mock:
+        require_runnable()
+    events = check_events(req.events, mock=mock)
+    compute = mock_data.recover if mock else _live_recover
+    return cache.get_or_compute(cache.key("recover", [cache_scope(settings.mock_recover), req]), lambda: compute(events))

@@ -71,8 +71,16 @@ class Cache:
         return value
 
     def clear(self) -> None:
+        """Drop every cached response, in memory and (if used) the aegis:* keys in Redis."""
         with self._lock:
             self._mem.clear()
+        if self._redis is not None:
+            try:
+                keys = list(self._redis.scan_iter(match="aegis:*", count=500))
+                if keys:
+                    self._redis.delete(*keys)
+            except Exception as exc:  # Redis is optional; a failed purge must not break the request
+                log.info("cache: could not purge Redis keys (%s)", exc)
 
 
 cache = Cache(settings.cache_ttl_seconds, settings.redis_url)

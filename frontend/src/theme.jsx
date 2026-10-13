@@ -6,7 +6,7 @@ const STORAGE_KEY = 'aegis-theme'
 const TOKEN_NAMES = [
   'bg', 'surface', 'surface-2', 'surface-3', 'border', 'border-strong', 'fg', 'fg-2', 'fg-muted',
   'accent', 'accent-hover', 'accent-fg', 'ok', 'warn', 'bad',
-  'tier-supplier', 'tier-factory', 'tier-warehouse', 'tier-customer', 'map-bg',
+  'tier-supplier', 'tier-factory', 'tier-warehouse', 'tier-retailer', 'tier-customer', 'map-bg',
 ]
 
 function readStoredTheme() {

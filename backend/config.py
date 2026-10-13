@@ -44,6 +44,8 @@ class Settings:
     cors_origins: list[str] = field(
         default_factory=lambda: _list("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
     )
+    # Where the active network is persisted (data/active_network.json). Tests point this at a temp dir.
+    data_dir: str = field(default_factory=lambda: os.getenv("AEGIS_DATA_DIR", str(_HERE / "data")))
     max_upload_bytes: int = 2_000_000
     default_seed: int = 7
     default_horizon: int = 30

@@ -1,11 +1,12 @@
 """Pydantic v2 models for every request and response in the AEGIS API contract."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
-NodeKind = Literal["supplier", "factory", "warehouse", "customer"]
+from node_types import ALL_TYPE_FIELDS, TYPE_FIELDS, NodeKind, TransportMode, is_demand
+
 NodeStatus = Literal["ok", "stressed", "down"]
 EventType = Literal["node", "edge", "demand"]
 
@@ -24,13 +25,18 @@ class Node(BaseModel):
     lon: float
     capacity: float = Field(ge=0, description="units/day (production or throughput)")
     stock: float = Field(ge=0, description="on-hand inventory, units")
-    demand: float = Field(ge=0, description="units/day (customers only, else 0)")
-    risk: float = Field(ge=0, le=1, description="ML-predicted share of demand lost if this node fails alone (criticality, 0..1)")
+    demand: float = Field(ge=0, description="units/day (demand nodes only: retailers and customers, else 0)")
+    risk: float | None = Field(
+        ge=0, le=1, description="ML-predicted share of demand lost if this node fails alone (criticality, 0..1); "
+        "null when the network is too small or the model cannot score it (see risk_note)"
+    )
+    risk_note: str | None = Field(default=None, description="why risk is null")
     reliability: float = Field(default=1.0, ge=0, le=1, description="historical on-time-in-full rate")
-    utilization: float = Field(default=0.0, ge=0, description="baseline load / capacity (0 for customers)")
+    utilization: float = Field(default=0.0, ge=0, description="baseline load / capacity (0 for leaf demand nodes)")
     top_factors: list[RiskFactor] = []
     name: str | None = None
     backup: bool = False
+    details: dict[str, Any] = Field(default_factory=dict, description="extra builder fields (material, priority, ...)")
 
 
 class Edge(BaseModel):
@@ -40,6 +46,9 @@ class Edge(BaseModel):
     lead: float = Field(ge=0, description="lead time, days")
     cost: float = Field(ge=0, description="INR per unit")
     co2: float = Field(ge=0, description="kg CO2 per unit")
+    id: str | None = Field(default=None, description="builder lane id (manual networks)")
+    mode: TransportMode | None = None
+    distance_km: float | None = None
 
 
 class NetworkResponse(BaseModel):
@@ -271,4 +280,156 @@ class UploadResponse(BaseModel):
     network: NetworkResponse
     summary: UploadSummary
     warnings: list[str]
-    activated: bool = Field(description="true if the uploaded network replaced the live graph for core/ routers")
+    activated: bool = Field(description="true if the uploaded network became the active network (source = csv)")
+
+
+# ---------------------------------------------------------------- manual network builder
+ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$"
+NetworkSource = Literal["preset", "csv", "manual"]
+ActiveState = Literal["active", "inactive"]
+MAX_NODES = 60
+MAX_EDGES = 400
+
+_STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+
+
+class BuilderNode(BaseModel):
+    """A node as the builder edits it. Common fields first; type-specific ones must be null for other kinds."""
+    model_config = _STRICT
+
+    id: str | None = Field(default=None, pattern=ID_PATTERN, description="auto-generated (S1, F2, ...) when omitted")
+    name: str = Field(min_length=1, max_length=80)
+    kind: NodeKind
+    city: str = Field(default="", max_length=120, description="address or city")
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    capacity: float = Field(default=0.0, ge=0, description="throughput, units/day")
+    stock: float = Field(default=0.0, ge=0, description="current stock, units")
+    reliability: float = Field(default=0.95, ge=0, le=1)
+    op_cost: float = Field(default=0.0, ge=0, description="operating cost, INR per unit")
+    status: ActiveState = "active"
+    # supplier
+    material: str | None = Field(default=None, max_length=80)
+    lead_time_days: float | None = Field(default=None, ge=0, le=365)
+    min_order_qty: float | None = Field(default=None, ge=0)
+    is_backup: bool = False
+    price_per_unit: float | None = Field(default=None, ge=0)
+    # factory
+    production_capacity: float | None = Field(default=None, ge=0, description="units/day; overrides capacity in the engine")
+    production_cost: float | None = Field(default=None, ge=0)
+    overtime_limit_pct: float | None = Field(default=None, ge=0, le=100)
+    shifts_per_day: int | None = Field(default=None, ge=1, le=4)
+    # warehouse
+    storage_capacity: float | None = Field(default=None, ge=0, description="units")
+    safety_stock: float | None = Field(default=None, ge=0)
+    holding_cost: float | None = Field(default=None, ge=0, description="INR per unit per day")
+    handling_time_days: float | None = Field(default=None, ge=0, le=60)
+    # retailer / customer
+    daily_demand: float | None = Field(default=None, ge=0, validate_default=True, description="units/day")
+    demand_variability_pct: float | None = Field(default=None, ge=0, le=100)
+    service_level_pct: float | None = Field(default=None, ge=0, le=100)
+    shelf_stock: float | None = Field(default=None, ge=0)
+    priority: Literal["low", "medium", "high"] | None = None
+    penalty_per_unit: float | None = Field(default=None, ge=0, description="INR per unmet unit")
+
+    @field_validator("daily_demand", mode="after")
+    @classmethod
+    def _demand_required(cls, v: float | None, info: ValidationInfo) -> float | None:
+        kind = info.data.get("kind")
+        if v is None and is_demand(kind):
+            raise ValueError(f"daily demand is required for a {kind}")
+        return v
+
+    @model_validator(mode="after")
+    def _only_own_type_fields(self) -> "BuilderNode":
+        allowed = set(TYPE_FIELDS[self.kind])
+        stray = [f for f in ALL_TYPE_FIELDS if f not in allowed and getattr(self, f) not in (None, False)]
+        if stray:
+            raise ValueError(f"field(s) not used by a {self.kind}: {', '.join(stray)}")
+        return self
+
+
+class BuilderEdge(BaseModel):
+    """A lane. distance_km, lead, cost and co2 are suggested from the endpoints and mode when left empty."""
+    model_config = _STRICT
+
+    id: str | None = Field(default=None, pattern=ID_PATTERN, description="auto-generated (E1, E2, ...) when omitted")
+    source: str = Field(pattern=ID_PATTERN)
+    target: str = Field(pattern=ID_PATTERN)
+    mode: TransportMode = "road"
+    distance_km: float | None = Field(default=None, ge=0, le=25000)
+    lead: float | None = Field(default=None, ge=0, le=365, description="days")
+    capacity: float = Field(ge=0, description="units/day")
+    cost: float | None = Field(default=None, ge=0, description="INR per unit")
+    co2: float | None = Field(default=None, ge=0, description="kg CO2 per unit")
+    status: ActiveState = "active"
+
+    @model_validator(mode="after")
+    def _no_self_loop(self) -> "BuilderEdge":
+        if self.source == self.target:
+            raise ValueError(f"a lane cannot start and end at the same node ({self.source})")
+        return self
+
+
+class BuilderNetwork(BaseModel):
+    """Body of POST /network/import and /network/validate (an export file is accepted as-is)."""
+    model_config = ConfigDict(extra="ignore")
+
+    nodes: list[BuilderNode] = Field(default_factory=list, max_length=MAX_NODES)
+    edges: list[BuilderEdge] = Field(default_factory=list, max_length=MAX_EDGES)
+
+
+class ValidationIssue(BaseModel):
+    code: str
+    message: str
+    refs: list[str] = Field(default_factory=list, description="node or lane ids the issue is about")
+
+
+class ValidationReport(BaseModel):
+    errors: list[ValidationIssue] = Field(description="block Apply and every engine endpoint")
+    warnings: list[ValidationIssue] = Field(description="shown, but the network can still run")
+    runnable: bool
+
+
+class NetworkSourceInfo(BaseModel):
+    source: NetworkSource
+    version: int = Field(description="bumped on every change to any network or the active source")
+    node_count: int = Field(description="active network")
+    edge_count: int
+    runnable: bool = Field(description="false if the active network has blocking validation errors")
+    manual_node_count: int
+    manual_edge_count: int
+    csv_loaded: bool
+    note: str | None = Field(default=None, description="e.g. the persisted network could not be read at startup")
+
+
+class SetSourceRequest(BaseModel):
+    source: NetworkSource
+
+
+class ManualNetworkResponse(BaseModel):
+    source: NetworkSource
+    version: int
+    nodes: list[BuilderNode]
+    edges: list[BuilderEdge]
+    validation: ValidationReport
+
+
+class NodeMutationResponse(BaseModel):
+    node: BuilderNode | None
+    removed_edges: list[BuilderEdge] = []
+    version: int
+    validation: ValidationReport
+
+
+class EdgeMutationResponse(BaseModel):
+    edge: BuilderEdge | None
+    version: int
+    validation: ValidationReport
+
+
+class ExportedNetwork(BuilderNetwork):
+    format: Literal["aegis-network"] = "aegis-network"
+    schema_version: int = 1
+    source: NetworkSource
+    version: int

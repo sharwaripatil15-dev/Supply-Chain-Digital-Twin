@@ -22,3 +22,6 @@ Thumbs.db
 # Models / data artefacts
 *.pkl
 *.joblib
+
+# Saved active network (backend/data/active_network.json)
+backend/data/

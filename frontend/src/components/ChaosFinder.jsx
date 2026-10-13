@@ -5,6 +5,7 @@ import { fmtNum } from '../format.js'
 import { targetNodes } from '../lib/disruption.js'
 import { Badge, Button, Card, CardBody, CardHeader, InlineError, Meter, PageHeader, SkeletonBlock, Stat, Table, Td, Th, Tooltip, Tr, useToast } from './ui/index.js'
 import GraphPanel from './GraphPanel.jsx'
+import { NodeTag } from './NodeTypeIcon.jsx'
 
 // Chaos targets are node ids or lanes ("U->V").
 const outage = (target) => ({ type: target.includes('->') ? 'edge' : 'node', target, start: 2, duration: 10, severity: 1 })
@@ -15,9 +16,9 @@ export default function ChaosFinder() {
   const [selected, setSelected] = useState(null) // { targets: [...], key }
 
   useEffect(() => {
-    if (!chaos && !loading.chaos) loadChaos()
+    if (!chaos && !loading.chaos && !errors.chaos) loadChaos() // also reloads after the network changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [chaos])
 
   const simulate = (targets) => {
     runSimulation(targets.map(outage)).then((res) => {
@@ -32,7 +33,7 @@ export default function ChaosFinder() {
     }
     return network?.nodes.find((n) => n.id === id)?.name || id
   }
-  const maxSpof = Math.max(...(chaos?.spof.map((s) => s.unmet) || [1]))
+  const maxSpof = Math.max(1, ...(chaos?.spof ?? []).map((s) => s.unmet))
   const highlight = useMemo(() => {
     if (selected) return targetNodes(selected.targets)
     return chaos ? targetNodes([...chaos.spof.map((s) => s.target), ...chaos.hidden_pairs.flatMap((p) => p.pair)]) : null
@@ -75,10 +76,17 @@ export default function ChaosFinder() {
                     </tr>
                   </thead>
                   <tbody>
+                    {chaos && chaos.spof.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="px-5 py-4 text-sm text-fg-muted">
+                          No single failure loses demand beyond what this network already misses.
+                        </td>
+                      </tr>
+                    )}
                     {chaos?.spof.map((s) => (
                       <Tr key={s.target} selected={selected?.targets.join() === s.target} onClick={() => select([s.target])}>
                         <Td>
-                          <div className="font-medium text-fg">{s.target}</div>
+                          <NodeTag id={s.target} showName={false} />
                           <div className="text-xs text-fg-muted">{name(s.target)}</div>
                           <Meter className="mt-1.5" value={s.unmet} max={maxSpof} label={`${s.target} impact`} />
                         </Td>
@@ -121,7 +129,11 @@ export default function ChaosFinder() {
                       return (
                         <Tr key={key} selected={selected?.targets.join() === key} onClick={() => select(p.pair)}>
                           <Td>
-                            <div className="font-medium text-fg">{p.pair.join(' + ')}</div>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <NodeTag id={p.pair[0]} showName={false} />
+                              <span className="text-fg-muted">+</span>
+                              <NodeTag id={p.pair[1]} showName={false} />
+                            </div>
                             <div className="max-w-[16rem] truncate text-xs text-fg-muted" title={`${name(p.pair[0])} & ${name(p.pair[1])}`}>
                               {name(p.pair[0])} & {name(p.pair[1])}
                             </div>

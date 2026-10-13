@@ -1,7 +1,8 @@
 """Node criticality model (an ML surrogate of the flow engine) with SHAP explanations. Owner: D.
 
 Training data: networks from core.graph.build_network(seed) for seeds 0..200. For every supplier, factory and
-warehouse (customers are excluded: a failed customer loses exactly its own demand share, so it is computed, not learned):
+warehouse (demand nodes are excluded: a failed retailer/customer loses its own demand plus whatever it forwards, so
+that is computed exactly by the flow engine, not learned):
     features  betweenness centrality, in/out degree, capacity share within its tier (demand share for customers),
               stock cover (stock / capacity, or stock / demand for customers, in days), alternate paths (node-disjoint
               supplier->customer paths that avoid the node), reliability, tier one-hot, backup flag
@@ -12,6 +13,8 @@ training): MAE and R^2. Speedup = engine time per label / model time per predict
 Node "risk" in the API = the model's predicted share of demand lost if the node fails (its criticality); SHAP
 TreeExplainer values say which features push that up or down.
 The fitted model is persisted to MODEL_PATH and retrained automatically if missing or from an older version.
+Small or degenerate networks (fewer than MIN_NODES_FOR_MODEL nodes, no supply-side node, no demand, no
+supplier->demand path) get risk = None and a `risk_note` instead of a prediction; so does any model failure.
 Pre-train with:  python -m core.risk_ml
 """
 from __future__ import annotations
@@ -25,11 +28,13 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 
+from node_types import KINDS, is_demand, total_demand
+
 MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "risk_xgb.joblib"
 MODEL_VERSION = 3
 TRAIN_SEEDS = range(0, 201)
 TEST_SHARE = 0.2
-KINDS = ["supplier", "factory", "warehouse", "customer"]
+MIN_NODES_FOR_MODEL = 4
 FEATURES = [
     "betweenness", "in_degree", "out_degree", "capacity_share_in_tier", "stock_cover_days",
     "alternate_paths", "reliability", "is_supplier", "is_factory", "is_warehouse", "is_backup",
@@ -40,14 +45,14 @@ _bundle: dict | None = None
 
 
 def _alternate_paths(G: nx.DiGraph) -> dict[str, int]:
-    """Node-disjoint supplier->customer paths remaining when each node is removed."""
+    """Node-disjoint supplier->demand-node paths remaining when each node is removed."""
     H = G.copy()
     H.add_node("__SRC__")
     H.add_node("__SINK__")
     for n, d in G.nodes(data=True):
         if d["kind"] == "supplier":
             H.add_edge("__SRC__", n)
-        elif d["kind"] == "customer":
+        elif is_demand(d["kind"]):
             H.add_edge(n, "__SINK__")
     out = {}
     for n in G:
@@ -61,12 +66,13 @@ def build_features(G: nx.DiGraph) -> pd.DataFrame:
     """One row per node (index = node id) with the FEATURES columns."""
     between = nx.betweenness_centrality(G)
     alt = _alternate_paths(G)
+    size_of = lambda d: (d.get("demand") if is_demand(d["kind"]) else d.get("capacity")) or 0.0  # noqa: E731
     tier_total = {k: 0.0 for k in KINDS}
     for _, d in G.nodes(data=True):
-        tier_total[d["kind"]] += d["demand"] if d["kind"] == "customer" else d["capacity"]
+        tier_total[d["kind"]] = tier_total.get(d["kind"], 0.0) + size_of(d)
     rows = {}
     for n, d in G.nodes(data=True):
-        size = d["demand"] if d["kind"] == "customer" else d["capacity"]
+        size = size_of(d)
         rows[n] = {
             "betweenness": between[n],
             "in_degree": G.in_degree(n),
@@ -75,7 +81,7 @@ def build_features(G: nx.DiGraph) -> pd.DataFrame:
             "stock_cover_days": d.get("stock", 0.0) / size if size else 0.0,
             "alternate_paths": alt[n],
             "reliability": d.get("reliability", 1.0),
-            **{f"is_{k}": float(d["kind"] == k) for k in KINDS if k != "customer"},
+            **{f"is_{k}": float(d["kind"] == k) for k in ("supplier", "factory", "warehouse")},
             "is_backup": float(bool(d.get("backup"))),
         }
     return pd.DataFrame.from_dict(rows, orient="index")[FEATURES]
@@ -84,7 +90,7 @@ def build_features(G: nx.DiGraph) -> pd.DataFrame:
 def _labels(G: nx.DiGraph) -> dict[str, float]:
     from core.chaos import failure_unmet
 
-    return {n: failure_unmet(G, (n,)) for n, d in G.nodes(data=True) if d["kind"] != "customer"}
+    return {n: failure_unmet(G, (n,)) for n, d in G.nodes(data=True) if not is_demand(d["kind"])}
 
 
 def generate_dataset(seeds=TRAIN_SEEDS) -> tuple[pd.DataFrame, float]:
@@ -98,7 +104,7 @@ def generate_dataset(seeds=TRAIN_SEEDS) -> tuple[pd.DataFrame, float]:
         except RuntimeError:  # a seed whose generated network cannot meet baseline demand
             continue
         X = build_features(G)
-        X = X[[G.nodes[n]["kind"] != "customer" for n in X.index]]
+        X = X[[not is_demand(G.nodes[n]["kind"]) for n in X.index]]
         t = time.perf_counter()
         y = _labels(G)
         label_time += time.perf_counter() - t
@@ -182,19 +188,57 @@ def surrogate_report() -> dict:
     return dict(load_model()["metrics"])
 
 
+def model_unavailable_reason(G: nx.DiGraph) -> str | None:
+    """Why the criticality model cannot score this network, or None when it can."""
+    if G.number_of_nodes() < MIN_NODES_FOR_MODEL:
+        return f"Network too small for the risk model (needs at least {MIN_NODES_FOR_MODEL} nodes)."
+    if not any(not is_demand(d["kind"]) for _, d in G.nodes(data=True)):
+        return "No supply-side sites to score."
+    if total_demand(G) <= 0:
+        return "No demand in the network, so there is nothing to lose."
+    suppliers = [n for n, d in G.nodes(data=True) if d["kind"] == "supplier"]
+    reach = set().union(*(nx.descendants(G, s) for s in suppliers)) if suppliers else set()
+    if not any(is_demand(G.nodes[n]["kind"]) for n in reach):
+        return "No supplier reaches a demand node, so criticality is undefined."
+    return None
+
+
+def _unscored(G: nx.DiGraph, note: str) -> dict[str, dict]:
+    return {n: {"risk": None, "top_factors": [], "risk_note": note} for n in G}
+
+
 def node_risk_with_shap(G: nx.DiGraph, top_k: int = 4) -> dict[str, dict]:
-    """{node_id: {"risk": predicted share lost if it fails (0..1), "top_factors": [{"feature", "impact"}]}}."""
+    """{node_id: {"risk": predicted share lost if it fails (0..1) or None, "top_factors": [{"feature", "impact"}],
+    "risk_note": str | None}}. Never raises: unusable networks or model errors give risk None with a note."""
+    reason = model_unavailable_reason(G)
+    if reason:
+        return _unscored(G, reason)
+    try:
+        return _score(G, top_k)
+    except Exception as exc:  # the model is a nice-to-have; the twin must still render
+        return _unscored(G, f"Risk model unavailable: {exc}")
+
+
+def _score(G: nx.DiGraph, top_k: int) -> dict[str, dict]:
     import shap
+
+    from core.chaos import failure_loss
 
     bundle = load_model()
     X = build_features(G)
-    total_demand = sum(d["demand"] for _, d in G.nodes(data=True) if d["kind"] == "customer") or 1.0
+    total = total_demand(G) or 1.0
     out = {}
-    for n, d in G.nodes(data=True):  # a customer that fails loses exactly its own demand: no model needed
-        if d["kind"] == "customer":
-            share = d["demand"] / total_demand
-            out[n] = {"risk": round(share, 3), "top_factors": [{"feature": "own_demand_share", "impact": round(share, 4)}]}
-    X = X[[G.nodes[n]["kind"] != "customer" for n in X.index]]
+    for n, d in G.nodes(data=True):  # a failed demand node loses its own demand (+ what it forwards): no model needed
+        if is_demand(d["kind"]):
+            if G.out_degree(n):  # a retailer that also feeds customers: let the flow engine measure it
+                share = failure_loss(G, (n,))
+                out[n] = {"risk": round(share, 3), "top_factors": [{"feature": "demand_lost_incl_downstream", "impact": round(share, 4)}]}
+            else:
+                share = (d.get("demand") or 0.0) / total
+                out[n] = {"risk": round(share, 3), "top_factors": [{"feature": "own_demand_share", "impact": round(share, 4)}]}
+    X = X[[not is_demand(G.nodes[n]["kind"]) for n in X.index]]
+    if X.empty:
+        return out
     pred = np.clip(bundle["model"].predict(X), 0, 1)
     values = shap.TreeExplainer(bundle["model"]).shap_values(X)
     for i, n in enumerate(X.index):

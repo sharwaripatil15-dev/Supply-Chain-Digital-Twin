@@ -1,7 +1,7 @@
 """Strategy comparison, fix-safety check, recommendation and ROI. Owner: B.
 
 Strategies (each a core.optimizer plan with a lever set; "Do nothing" is the plan with no levers):
-    Do nothing        today's lane allocations, no backup; customer stock absorbs what it can
+    Do nothing        today's lane allocations, no backup; stock at demand nodes absorbs what it can
     Reroute only      re-plan flows across all existing lanes
     Reroute + backup  ... and trigger the backup supplier contract (fee, opens after the activation lag)
     Inventory buffer  pre-position finished goods at warehouses (no rerouting)
@@ -131,9 +131,9 @@ def _describe(name: str, plan: dict) -> str:
         bits.append(f"shifts production {', '.join(a['from_factory'] + '->' + a['to_factory'] for a in plan['production_actions'])}")
     if plan["cost_breakdown"].get("overtime"):
         bits.append("adds overtime")
-    stock = f" Uses {plan['stock_drawn']:,.0f} units of customer stock." if plan["stock_drawn"] else ""
+    stock = f" Uses {plan['stock_drawn']:,.0f} units of retailer/customer stock." if plan["stock_drawn"] else ""
     if name == "Do nothing":
-        return "Keep today's lane allocations; customer stock absorbs what it can." + stock
+        return "Keep today's lane allocations; retailer/customer stock absorbs what it can." + stock
     if not bits:
         return "No lever in this strategy helps here; same outcome as re-planning alone." + stock
     prefix = "Prices CO2 15x higher: " if name == "Green plan" else ""
@@ -173,7 +173,7 @@ def run_strategies(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30) ->
 def roi(G: nx.DiGraph, rows: list[dict]) -> dict:
     unit_price = G.graph.get("unit_price", 4200)
     nothing = next(r for r in rows if r["name"] == "Do nothing")
-    rec = next(r for r in rows if r["recommended"])
+    rec = next((r for r in rows if r["recommended"]), nothing)
     inaction = round(nothing["unmet"] * unit_price, 0)
     fix = round(rec["cost"] + rec["unmet"] * unit_price, 0)
     return {"inaction_loss": inaction, "fix_cost": fix, "net_saving": round(inaction - fix, 0)}

@@ -10,13 +10,15 @@ Decision variables per day t in the window (first event start .. last event end,
                                                           warehouse, <= PREPO_SOURCE_SHARE of that stock)
     y         backup contract triggered                  (lever "backup": binary, one-off fee; supply opens
                                                           BACKUP_ACTIVATION_DAYS after the disruption starts)
-    s[c,t], u[c,t]  customer stock drawn / demand unmet
+    s[c,t], u[c,t]  demand-node stock drawn / demand unmet (demand nodes = retailers and customers)
 Constraints: supplier output <= capacity; factory flow conservation with capacity + overtime + shift-in - shift-out;
-warehouse inflow + pre-positioned draws = outflow <= capacity + overtime; customer received + stock + unmet = demand,
-received <= demand (no restocking, as in core.sim); cumulative stock draws <= starting stock.
+warehouse inflow + pre-positioned draws = outflow <= capacity + overtime; a demand node keeps (inflow - outflow) and
+forwards the rest (outflow <= its capacity, 0 = no limit): kept + stock + unmet = demand, kept <= demand (no restocking,
+as in core.sim); cumulative stock draws <= starting stock.
+Variable and constraint names use node indices, never raw ids, so any user-supplied id is safe for PuLP.
 Objective (INR):  flow cost (backup lanes x1.5) + overtime + shift + inventory (transfer + holding) + backup fee
                   + W_STOCK_DRAW x stock drawn + w_unmet x unmet + w_co2 x kg CO2.
-With no levers this is "do nothing": today's lane allocations, no backup, customer stock absorbs the gap.
+With no levers this is "do nothing": today's lane allocations, no backup, demand-node stock absorbs the gap.
 Solved with CBC through PuLP. A plan reports its incremental cost against normal operations, unmet units,
 recovery days, CO2, delay (core.delay) and the capacity changes the fix-safety check needs.
 """
@@ -29,12 +31,13 @@ import pulp
 
 from core.delay import arrival_lead, delay_stats
 from core.sim import BACKUP_ACTIVATION_DAYS, BACKUP_COST_FACTOR, _active_state, solve_flow, spike_baseline
+from node_types import is_demand, total_demand
 from schemas import Event
 
 LEVERS = ("reroute", "backup", "overtime", "safety_stock", "production_shift")
 
 W_UNMET = 10_000.0  # INR per unit not delivered (lost margin + goodwill; above the 4,200 list price)
-W_STOCK_DRAW = 250.0  # INR per unit of customer stock consumed (above any path's freight, so delivery comes first)
+W_STOCK_DRAW = 250.0  # INR per unit of demand-node stock consumed (above any path's freight, so delivery comes first)
 W_CO2 = 4.0  # INR per kg CO2 (~ USD 50/t social cost of carbon)
 
 OVERTIME_MAX = 0.30
@@ -62,12 +65,17 @@ def disruption_window(events: Iterable[Event], horizon: int) -> list[int]:
 def baseline(G: nx.DiGraph) -> dict:
     """Undisrupted flow, freight cost per delivered unit, and arrival lead times."""
     base = solve_flow(G)
-    demand = sum(d["demand"] for _, d in G.nodes(data=True) if d["kind"] == "customer")
+    demand = total_demand(G)
     return {"flow": base, "cost_per_unit": base["cost"] / demand if demand else 0.0, "lead": arrival_lead(G, base["flow"])}
 
 
 def lane_cost(G: nx.DiGraph, u: str, v: str) -> float:
     return G.edges[u, v]["cost"] * (BACKUP_COST_FACTOR if G.nodes[u].get("backup") else 1.0)
+
+
+def _ix(G: nx.DiGraph) -> dict[str, int]:
+    """Stable node index used in LP names (ids may contain characters PuLP rewrites, causing name clashes)."""
+    return {n: i for i, n in enumerate(G)}
 
 
 def safety_stock_lever(prob: pulp.LpProblem, G: nx.DiGraph, days: list[int], down: set[str]) -> tuple[dict, dict, pulp.LpAffineExpression]:
@@ -76,13 +84,15 @@ def safety_stock_lever(prob: pulp.LpProblem, G: nx.DiGraph, days: list[int], dow
     Units come from finished-goods stock at factories that are not hit (<= PREPO_SOURCE_SHARE of it).
     Returns (pre, draw, cost_expr); the caller adds draw[w,t] to warehouse w's supply on day t.
     """
+    ix = _ix(G)
     whs = [n for n, d in G.nodes(data=True) if d["kind"] == "warehouse" and n not in down]
-    source = PREPO_SOURCE_SHARE * sum(d["stock"] for n, d in G.nodes(data=True) if d["kind"] == "factory" and n not in down)
-    pre = {w: pulp.LpVariable(f"pre_{w}", 0, PREPO_DAYS * G.nodes[w]["capacity"]) for w in whs}
-    draw = {(w, t): pulp.LpVariable(f"draw_{w}_{t}", 0) for w in whs for t in days}
+    source = PREPO_SOURCE_SHARE * sum(d.get("stock") or 0.0 for n, d in G.nodes(data=True) if d["kind"] == "factory" and n not in down)
+    pre = {w: pulp.LpVariable(f"pre_{ix[w]}", 0, PREPO_DAYS * (G.nodes[w].get("capacity") or 0.0)) for w in whs}
+    draw = {(w, t): pulp.LpVariable(f"draw_{ix[w]}_{t}", 0) for w in whs for t in days}
     for w in whs:
-        prob += pulp.lpSum(draw[w, t] for t in days) <= pre[w], f"prepo_{w}"
-    prob += pulp.lpSum(pre.values()) <= source, "prepo_source"
+        prob += pulp.lpSum(draw[w, t] for t in days) <= pre[w], f"prepo_{ix[w]}"
+    if pre:  # a network without warehouses has nothing to pre-position into
+        prob += pulp.lpSum(pre.values()) <= source, "prepo_source"
     cost = (PREPO_COST + HOLDING_PER_DAY * len(days)) * pulp.lpSum(pre.values())
     return pre, draw, cost
 
@@ -92,8 +102,10 @@ def production_shift_lever(G: nx.DiGraph, days: list[int]) -> tuple[dict, pulp.L
 
     Bounds: <= SHIFT_MAX x capacity of a (the plan being moved) and of b (temporary lines). Returns (sh, cost_expr).
     """
+    ix = _ix(G)
     facs = [n for n, d in G.nodes(data=True) if d["kind"] == "factory"]
-    sh = {(a, b, t): pulp.LpVariable(f"sh_{a}_{b}_{t}", 0, SHIFT_MAX * min(G.nodes[a]["capacity"], G.nodes[b]["capacity"]))
+    cap = lambda n: G.nodes[n].get("capacity") or 0.0  # noqa: E731
+    sh = {(a, b, t): pulp.LpVariable(f"sh_{ix[a]}_{ix[b]}_{t}", 0, SHIFT_MAX * min(cap(a), cap(b)))
           for a in facs for b in facs if a != b for t in days}
     return sh, SHIFT_COST * pulp.lpSum(sh.values())
 
@@ -127,12 +139,13 @@ def optimize_plan(
         return plan
 
     kind = {n: d["kind"] for n, d in G.nodes(data=True)}
+    ix = _ix(G)
     edges = list(G.edges)
     spike = spike_baseline(G, events, horizon)
     states = {t: _active_state(events, t, spike) for t in days}  # (node factor, edge factor, demand multiplier)
     nf = lambda n, t: max(0.0, min(1.0, states[t][0].get(n, 1.0)))  # noqa: E731
     ef = lambda e, t: max(0.0, min(1.0, states[t][1].get(e, 1.0)))  # noqa: E731
-    dem = {(c, t): G.nodes[c]["demand"] * states[t][2].get(c, 1.0) for c in G if kind[c] == "customer" for t in days}
+    dem = {(c, t): (G.nodes[c].get("demand") or 0.0) * states[t][2].get(c, 1.0) for c in G if is_demand(kind[c]) for t in days}
     contract_day = days[0] + BACKUP_ACTIVATION_DAYS
     reroute = "reroute" in levers
 
@@ -141,15 +154,16 @@ def optimize_plan(
         return cap if reroute else min(cap, base["flow"]["flow"].get(e, 0.0))
 
     prob = pulp.LpProblem("recovery", pulp.LpMinimize)
-    x = {(e, t): pulp.LpVariable(f"x_{e[0]}_{e[1]}_{t}", 0, lane_cap(e, t)) for e in edges for t in days}
-    ot = {(v, t): pulp.LpVariable(f"ot_{v}_{t}", 0, OVERTIME_MAX * G.nodes[v]["capacity"] * nf(v, t))
+    x = {(e, t): pulp.LpVariable(f"x_{ix[e[0]]}_{ix[e[1]]}_{t}", 0, lane_cap(e, t)) for e in edges for t in days}
+    ot = {(v, t): pulp.LpVariable(f"ot_{ix[v]}_{t}", 0, OVERTIME_MAX * (G.nodes[v].get("capacity") or 0.0) * nf(v, t))
           for v in G if kind[v] in ("factory", "warehouse") for t in days} if "overtime" in levers else {}
     down_nodes = {e.target for e in events if e.type == "node" and e.severity >= 1}
     pre, draw, prepo_cost = safety_stock_lever(prob, G, days, down_nodes) if "safety_stock" in levers else ({}, {}, 0)
     sh, shift_cost = production_shift_lever(G, days) if "production_shift" in levers else ({}, 0)
     y = pulp.LpVariable("backup_contract", cat="Binary") if "backup" in levers else None
-    s = {(c, t): pulp.LpVariable(f"s_{c}_{t}", 0) for (c, t) in dem}
-    u = {(c, t): pulp.LpVariable(f"u_{c}_{t}", 0) for (c, t) in dem}
+    s = {(c, t): pulp.LpVariable(f"s_{ix[c]}_{t}", 0) for (c, t) in dem}
+    u = {(c, t): pulp.LpVariable(f"u_{ix[c]}_{t}", 0) for (c, t) in dem}
+    total = sum(dem.values()) or 0.0
 
     def inflow(n, t):
         return pulp.lpSum(x[(p, n), t] for p in G.predecessors(n))
@@ -159,31 +173,36 @@ def optimize_plan(
 
     for t in days:
         for n, d in G.nodes(data=True):
-            cap = d["capacity"] * nf(n, t)
+            cap = (d.get("capacity") or 0.0) * nf(n, t)
             k = kind[n]
+            i = ix[n]
             if k == "supplier":
                 if d.get("backup"):
                     cap = cap * y if (y is not None and t >= contract_day) else 0
-                prob += outflow(n, t) <= cap, f"sup_{n}_{t}"
+                prob += outflow(n, t) <= cap, f"sup_{i}_{t}"
             elif k == "factory":
-                prob += inflow(n, t) == outflow(n, t), f"bal_{n}_{t}"
+                prob += inflow(n, t) == outflow(n, t), f"bal_{i}_{t}"
                 extra = ot.get((n, t), 0)
                 if sh:
                     shift_in = pulp.lpSum(sh[a, n, t] for a in G if kind[a] == "factory" and a != n)
                     shift_out = pulp.lpSum(sh[n, b, t] for b in G if kind[b] == "factory" and b != n)
                     if nf(n, t) > 0:
-                        prob += outflow(n, t) <= cap + extra + shift_in - shift_out, f"cap_{n}_{t}"
+                        prob += outflow(n, t) <= cap + extra + shift_in - shift_out, f"cap_{i}_{t}"
                     else:  # a plant that is down can hand its plan over but makes nothing itself
-                        prob += outflow(n, t) <= 0, f"cap_{n}_{t}"
+                        prob += outflow(n, t) <= 0, f"cap_{i}_{t}"
                 else:
-                    prob += outflow(n, t) <= cap + extra, f"cap_{n}_{t}"
+                    prob += outflow(n, t) <= cap + extra, f"cap_{i}_{t}"
             elif k == "warehouse":
-                prob += inflow(n, t) + draw.get((n, t), 0) == outflow(n, t), f"bal_{n}_{t}"
-                prob += outflow(n, t) <= cap + ot.get((n, t), 0), f"cap_{n}_{t}"
-            else:
-                prob += inflow(n, t) <= dem[n, t], f"recv_{n}_{t}"
-                prob += inflow(n, t) + s[n, t] + u[n, t] == dem[n, t], f"dem_{n}_{t}"
-                prob += pulp.lpSum(s[n, tt] for tt in days if tt <= t) <= G.nodes[n]["stock"], f"stock_{n}_{t}"
+                prob += inflow(n, t) + draw.get((n, t), 0) == outflow(n, t), f"bal_{i}_{t}"
+                prob += outflow(n, t) <= cap + ot.get((n, t), 0), f"cap_{i}_{t}"
+            else:  # demand node (retailer / customer): keeps inflow - outflow, forwards the rest
+                kept = inflow(n, t) - outflow(n, t)
+                if G.out_degree(n):
+                    prob += outflow(n, t) <= (d.get("capacity") or total) * nf(n, t), f"fwd_{i}_{t}"
+                    prob += kept >= 0, f"keep_{i}_{t}"
+                prob += kept <= dem[n, t], f"recv_{i}_{t}"
+                prob += kept + s[n, t] + u[n, t] == dem[n, t], f"dem_{i}_{t}"
+                prob += pulp.lpSum(s[n, tt] for tt in days if tt <= t) <= (d.get("stock") or 0.0), f"stock_{i}_{t}"
 
     transport = pulp.lpSum(lane_cost(G, *e) * x[e, t] for e in edges for t in days)
     overtime = OVERTIME_COST * pulp.lpSum(ot.values())
@@ -198,7 +217,7 @@ def optimize_plan(
 
     val = lambda v: float(pulp.value(v) or 0.0)  # noqa: E731
     daily_flows = [{e: val(x[e, t]) for e in edges} for t in days]
-    delivered = sum(val(inflow(c, t)) for (c, t) in dem)
+    delivered = sum(val(inflow(c, t)) - val(outflow(c, t)) for (c, t) in dem)
     breakdown = {
         "extra_freight": max(0.0, val(transport) - base["cost_per_unit"] * delivered),
         "overtime": val(overtime),
@@ -206,7 +225,7 @@ def optimize_plan(
         "production_shift": val(shift_cost) if sh else 0.0,
         "backup_fee": BACKUP_FEE * val(y) if y is not None else 0.0,
     }
-    shortfall_days = [t for t in days if any(val(s[c, t]) + val(u[c, t]) > EPS for c in G if kind[c] == "customer")]
+    shortfall_days = [t for t in days if any(val(s[c, t]) + val(u[c, t]) > EPS for c in G if is_demand(kind[c]))]
 
     cap_delta: dict[str, float] = {}
     for n in G:
@@ -242,7 +261,7 @@ def _disrupted_label(events: list[Event]) -> str:
 def _inventory_actions(G: nx.DiGraph, events: list[Event], days: list[int], pre: dict[str, float]) -> list[dict]:
     hit = {e.target for e in events if e.type == "node"}
     sources = sorted((n for n, d in G.nodes(data=True) if d["kind"] == "factory" and n not in hit),
-                     key=lambda n: -G.nodes[n]["stock"])
+                     key=lambda n: -(G.nodes[n].get("stock") or 0.0))
     actions = []
     for w, units in sorted(pre.items(), key=lambda kv: -kv[1]):
         if units <= EPS:
@@ -267,6 +286,6 @@ def _production_actions(G: nx.DiGraph, days: list[int], sh: dict, nf) -> list[di
             "from_factory": a, "to_factory": b,
             "units_per_day": round(sum(v for _, v in active) / len(active)),
             "start_day": active[0][0], "duration": len(active),
-            "reason": f"{a} {G.nodes[a]['name']} {why}; {b} {G.nodes[b]['name']} has spare capacity and unaffected inbound supply.",
+            "reason": f"{a} {G.nodes[a].get('name', a)} {why}; {b} {G.nodes[b].get('name', b)} has spare capacity and unaffected inbound supply.",
         })
     return actions

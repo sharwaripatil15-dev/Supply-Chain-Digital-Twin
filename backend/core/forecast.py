@@ -1,6 +1,6 @@
-"""Customer demand forecasting. Owner: D.
+"""Demand forecasting for every demand node (retailers and customers). Owner: D.
 
-History: a seeded synthetic daily series per customer (28 days): base demand x (1 + weekly seasonality) + small trend
+History: a seeded synthetic daily series per demand node with demand > 0 (28 days): base demand x (1 + weekly seasonality) + small trend
 + noise. The seed comes from the graph seed and the customer id, so a network always has the same history.
 Model: additive Holt-Winters exponential smoothing (level, trend, weekly season), smoothing parameters chosen by
 grid search on one-step-ahead squared error. Bands: P10/P90 = mean -/+ 1.2816 x residual sd x sqrt(1 + (h-1) x alpha^2).
@@ -16,6 +16,8 @@ import zlib
 import networkx as nx
 import numpy as np
 
+from node_types import is_demand
+
 SEASON = 7
 HISTORY_DAYS = 28
 BACKTEST_DAYS = 7
@@ -28,7 +30,8 @@ _CACHE: dict[tuple, dict] = {}
 
 
 def _customers(G: nx.DiGraph) -> list[str]:
-    return [n for n, d in G.nodes(data=True) if d["kind"] == "customer"]
+    """Demand nodes with positive demand (a zero-demand node has nothing to forecast)."""
+    return [n for n, d in G.nodes(data=True) if is_demand(d["kind"]) and (d.get("demand") or 0.0) > 0]
 
 
 def demand_history(G: nx.DiGraph, days: int = HISTORY_DAYS, seed: int | None = None) -> dict[str, np.ndarray]:
@@ -90,7 +93,7 @@ def forecast_demand(G: nx.DiGraph, horizon: int = 14) -> dict:
     for c, y in history.items():
         back = fit(y[:-BACKTEST_DAYS])
         actual = y[-BACKTEST_DAYS:]
-        apes.append(float(np.mean(np.abs(predict(back, BACKTEST_DAYS) - actual) / actual)))
+        apes.append(float(np.mean(np.abs(predict(back, BACKTEST_DAYS) - actual) / np.maximum(np.abs(actual), 1e-9))))
         model = fit(y)
         mean = predict(model, horizon)
         spread = [Z90 * model["sd"] * np.sqrt(1 + (h - 1) * model["alpha"] ** 2) for h in range(1, horizon + 1)]
@@ -101,12 +104,13 @@ def forecast_demand(G: nx.DiGraph, horizon: int = 14) -> dict:
                          for h, mu, s in zip(range(1, horizon + 1), mean, spread)],
         })
     result = {"horizon_days": horizon, "method": "Holt-Winters additive, weekly season (fitted per customer)",
-              "mape": round(float(np.mean(apes)), 4), "customers": customers}
+              "mape": round(float(np.mean(apes)), 4) if apes else 0.0, "customers": customers}
     _CACHE[key] = result
     return result
 
 
 def demand_ratio(G: nx.DiGraph, horizon: int = 30) -> dict[str, list[float]]:
-    """{customer: [forecast mean / nominal demand for sim day 0..horizon-1]}: the demand-spike baseline."""
+    """{demand node: [forecast mean / nominal demand for sim day 0..horizon-1]}: the demand-spike baseline."""
     fc = forecast_demand(G, horizon)
-    return {c["id"]: [p["mean"] / G.nodes[c["id"]]["demand"] for p in c["forecast"]] for c in fc["customers"]}
+    return {c["id"]: [p["mean"] / G.nodes[c["id"]]["demand"] for p in c["forecast"]]
+            for c in fc["customers"] if G.nodes[c["id"]].get("demand")}

@@ -1,20 +1,23 @@
 """Day-by-day disruption simulator. Owner: A.
 
 Model:
-    Each day is a single-period min-cost flow (`solve_flow`) from suppliers to customers.
-      * Node splitting: every non-customer node v becomes v_in -> v_out with capacity = its effective
-        production/throughput capacity, so node limits are ordinary arc limits.
+    Each day is a single-period min-cost flow (`solve_flow`) from suppliers to demand nodes (retailers and
+    customers, see node_types.is_demand).
+      * Node splitting: every non-demand node v becomes v_in -> v_out with capacity = its effective
+        production/throughput capacity, so node limits are ordinary arc limits. A demand node gets v_in -> sink for
+        its own demand and, if it ships on (a retailer feeding customers), v_in -> v_out limited by its capacity
+        (0 = no limit).
       * Disruptions scale capacities: node/edge events multiply capacity by (1 - severity) (severity 1 = down);
-        demand events multiply customer demand by (1 + severity).
+        demand events multiply a demand node's demand by (1 + severity).
       * The backup supplier is closed unless `allow_backup`; its lanes cost 1.5x, so once open it is only used
         when cheaper primary capacity runs out. In `simulate` it opens BACKUP_ACTIVATION_DAYS after the first
         projected shortfall (contract activation lag).
       * A super-source -> super-sink bypass arc priced at `shortage_penalty` keeps the problem feasible; flow on
         it is unmet demand. Solved with OR-Tools SimpleMinCostFlow (integer units, cost in 0.1 INR).
-    Day loop: apply active events -> solve flow (memoised per disruption state) -> customer stock absorbs any
+    Day loop: apply active events -> solve flow (memoised per disruption state) -> demand-node stock absorbs any
     shortfall -> once stock is exhausted the remainder is unmet (a stockout). Customer stock is not refilled
     within the horizon (conservative). Flow is same-day: lead times enter through core.delay, not as shipping lag.
-    Survival Clock = first day any customer has unmet demand (its stockout day); horizon if none.
+    Survival Clock = first day any demand node has unmet demand (its stockout day); horizon if none.
 """
 from __future__ import annotations
 
@@ -24,6 +27,7 @@ import networkx as nx
 from ortools.graph.python import min_cost_flow
 
 from core.delay import arrival_lead, delay_stats, find_bottlenecks
+from node_types import is_demand, total_demand
 from schemas import Event
 
 SUPER_SOURCE = "__SRC__"
@@ -36,9 +40,9 @@ COST_SCALE = 10  # OR-Tools needs integer costs
 
 class FlowResult(TypedDict):
     flow: dict[tuple[str, str], float]  # edge -> units shipped
-    throughput: dict[str, float]  # non-customer node -> units processed
-    served: dict[str, float]  # customer -> units delivered
-    unmet: dict[str, float]  # customer -> units short (before customer stock is used)
+    throughput: dict[str, float]  # non-demand node (or forwarding demand node) -> units processed
+    served: dict[str, float]  # demand node -> units delivered to its own demand
+    unmet: dict[str, float]  # demand node -> units short (before its stock is used)
     cost: float  # INR
 
 
@@ -55,7 +59,7 @@ def solve_flow(
     """Single-period min-cost flow with node splitting (see module docstring).
 
     down_nodes / down_edges: capacity 0. node_factor / edge_factor: remaining capacity share in [0, 1]
-    (partial disruption). demand_multiplier: per-customer dict or one float for all customers.
+    (partial disruption). demand_multiplier: per-demand-node dict or one float for all demand nodes.
     """
     node_factor = dict(node_factor or {})
     edge_factor = dict(edge_factor or {})
@@ -73,7 +77,7 @@ def solve_flow(
     v_out = lambda n: 2 * idx[n] + 1  # noqa: E731
     src, sink = 2 * len(nodes), 2 * len(nodes) + 1
 
-    demand = {n: round(d["demand"] * mult(n)) for n, d in G.nodes(data=True) if d["kind"] == "customer"}
+    demand = {n: round((d.get("demand") or 0.0) * mult(n)) for n, d in G.nodes(data=True) if is_demand(d["kind"])}
     total = int(sum(demand.values()))
 
     starts, ends, caps, costs, tags = [], [], [], [], []
@@ -87,10 +91,12 @@ def solve_flow(
 
     for n, d in G.nodes(data=True):
         f = max(0.0, min(1.0, node_factor.get(n, 1.0)))
-        if d["kind"] == "customer":
+        if is_demand(d["kind"]):
             arc(v_in(n), sink, demand[n] * f, 0, ("serve", n))
+            if G.out_degree(n):  # forwards to downstream demand nodes; capacity 0 means no limit
+                arc(v_in(n), v_out(n), (d.get("capacity") or total) * f, 0, ("node", n))
             continue
-        cap = d["capacity"] * f
+        cap = (d.get("capacity") or 0.0) * f
         if d.get("backup") and not allow_backup:
             cap = 0
         arc(v_in(n), v_out(n), cap, 0, ("node", n))
@@ -130,16 +136,16 @@ def solve_flow(
 
 
 def unmet_frac(G: nx.DiGraph, result: FlowResult) -> float:
-    """Unmet demand as a fraction of total customer demand, in [0, 1]."""
-    total = sum(d["demand"] for _, d in G.nodes(data=True) if d["kind"] == "customer")
+    """Unmet demand as a fraction of total demand (retailers + customers), in [0, 1]."""
+    total = total_demand(G)
     return 0.0 if total <= 0 else min(1.0, sum(result["unmet"].values()) / total)
 
 
 def _active_state(events: list[Event], day: int, baseline: Mapping[str, list[float]] | None = None) -> tuple[dict, dict, dict]:
     """Remaining-capacity factors and demand multipliers for the events active on `day`.
 
-    baseline: {customer: [forecast / nominal demand per day]} (core.forecast.demand_ratio). During a demand spike the
-    customer's demand is forecast(day) x (1 + severity); without a baseline it is nominal demand x (1 + severity).
+    baseline: {demand node: [forecast / nominal demand per day]} (core.forecast.demand_ratio). During a demand spike the
+    node's demand is forecast(day) x (1 + severity); without a baseline it is nominal demand x (1 + severity).
     """
     node_f: dict[str, float] = {}
     edge_f: dict[tuple[str, str], float] = {}
@@ -182,7 +188,7 @@ def simulate(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30, detail: 
     """
     events = list(events)
     kind = {n: d["kind"] for n, d in G.nodes(data=True)}
-    customers = [n for n in G if kind[n] == "customer"]
+    customers = [n for n in G if is_demand(kind[n])]  # every demand node (retailers and customers)
     label = {n: f"{n} {G.nodes[n].get('name', '')} ({G.nodes[n].get('city', '')})" for n in G}
 
     cache: dict[tuple, FlowResult] = {}
@@ -196,7 +202,7 @@ def simulate(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30, detail: 
 
     baseline = solve({}, {}, {}, False)
     base_lead = arrival_lead(G, baseline["flow"])
-    stock = {c: float(G.nodes[c]["stock"]) for c in customers}
+    stock = {c: float(G.nodes[c].get("stock") or 0.0) for c in customers}
 
     timeline: list[dict] = []
     log: list[tuple[int, str]] = []
@@ -232,8 +238,9 @@ def simulate(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30, detail: 
         day_unmet = 0.0
         for n in G:
             d = G.nodes[n]
-            if kind[n] == "customer":
-                util[n] = 0.0
+            if is_demand(kind[n]):
+                cap = d.get("capacity") or 0.0
+                util[n] = round(res["throughput"].get(n, 0.0) / cap, 3) if cap and n in res["throughput"] else 0.0
                 short = res["unmet"][n]
                 draw = min(stock[n], short)
                 stock[n] -= draw
@@ -249,7 +256,7 @@ def simulate(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30, detail: 
                     status[n] = "ok"
                 continue
             f = node_f.get(n, 1.0)
-            cap = d["capacity"]
+            cap = d.get("capacity") or 0.0
             u = res["throughput"].get(n, 0.0) / cap if cap else 0.0
             util[n] = round(u, 3)
             base_tp = baseline["throughput"].get(n, 0.0)
@@ -274,13 +281,13 @@ def simulate(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30, detail: 
             if st == was:
                 continue
             if st == "down":
-                log.append((day, f"Day {day}: {label[n]} {'STOCKOUT' if kind[n] == 'customer' else 'DOWN'}"))
+                log.append((day, f"Day {day}: {label[n]} {'STOCKOUT' if is_demand(kind[n]) else 'DOWN'}"))
             elif st == "stressed" and was == "ok":
                 log.append((day, f"Day {day}: {label[n]} stressed - {reasons.get(n, 'under pressure')}"))
             elif st == "ok":
                 log.append((day, f"Day {day}: {label[n]} recovered"))
         if day_unmet == 0 and any(r["unmet"] > 0 for r in timeline[-1:]):
-            log.append((day, f"Day {day}: all customer demand served again"))
+            log.append((day, f"Day {day}: all demand served again"))
         prev_status = status
 
         day_unmet = round(day_unmet, 1)

@@ -1,18 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Building2, Play, Plus, Route, Sparkles, TrendingUp, X } from 'lucide-react'
 import { DEMO_SCENARIOS, useStore } from '../store.js'
 import { eventLabel, fmtNum } from '../format.js'
+import { isDemand, typeOf } from '../lib/nodeTypes.js'
+import { scenariosFor } from '../lib/scenarios.js'
 import { Button, Card, CardBody, CardHeader, InlineError, SegmentedControl, cn, useToast } from './ui/index.js'
 
-const BLANK = { type: 'node', target: 'S1', start: 1, duration: 7, severity: 1 }
 const TYPE_ICON = { node: Building2, edge: Route, demand: TrendingUp }
 
 function targetOptions(network, type) {
   if (!network) return []
-  if (type === 'edge') return network.edges.map((e) => ({ value: `${e.source}->${e.target}`, label: `${e.source} → ${e.target}` }))
-  const nodes = type === 'demand' ? network.nodes.filter((n) => n.kind === 'customer') : network.nodes
-  return nodes.map((n) => ({ value: n.id, label: `${n.id} · ${n.name || n.city}` }))
+  if (type === 'edge') return (network.edges ?? []).map((e) => ({ value: `${e.source}->${e.target}`, label: `${e.source} → ${e.target}` }))
+  const nodes = type === 'demand' ? (network.nodes ?? []).filter((n) => isDemand(n.kind)) : network.nodes ?? []
+  return nodes.map((n) => ({ value: n.id, label: `${n.id} · ${n.name || n.city} (${typeOf(n.kind).label.toLowerCase()})` }))
 }
+
+const blankEvent = (network) => ({ type: 'node', target: targetOptions(network, 'node')[0]?.value || '', start: 1, duration: 7, severity: 1 })
 
 function EventEditor({ ev, network, onChange }) {
   const opts = targetOptions(network, ev.type)
@@ -67,8 +70,10 @@ function EventEditor({ ev, network, onChange }) {
 }
 
 export default function ScenarioPanel() {
-  const { network, events, setEvents, runSimulation, parseText, loading, errors } = useStore()
+  const { network, source, events, setEvents, runSimulation, parseText, loading, errors } = useStore()
   const toast = useToast()
+  const isPreset = !source || source.source === 'preset'
+  const scenarios = useMemo(() => scenariosFor(network, DEMO_SCENARIOS, isPreset), [network, isPreset])
   const [selected, setSelected] = useState(0)
   const [text, setText] = useState('Chennai electronics supplier floods from day 2 for about 10 days, and Bengaluru demand jumps 40%.')
   const busy = Boolean(loading.sim)
@@ -95,7 +100,8 @@ export default function ScenarioPanel() {
         <section aria-label="Demo scenarios">
           <h3 className="label mb-1.5">Quick start</h3>
           <div className="flex flex-col gap-0.5">
-            {DEMO_SCENARIOS.map((d) => (
+            {scenarios.length === 0 && <p className="px-2 text-xs text-fg-muted">Add a supplier and a lane to get suggested scenarios.</p>}
+            {scenarios.map((d) => (
               <Button key={d.id} variant="ghost" disabled={busy} onClick={() => run(d.events, d.label)} className="h-auto justify-start px-2 py-1.5 text-left">
                 <span className="flex flex-col">
                   <span className="text-sm font-medium text-fg">{d.label}</span>
@@ -126,7 +132,7 @@ export default function ScenarioPanel() {
               size="sm"
               icon={Plus}
               onClick={() => {
-                setEvents([...events, { ...BLANK }])
+                setEvents([...events, blankEvent(network)])
                 setSelected(events.length)
               }}
             >

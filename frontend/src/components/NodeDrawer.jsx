@@ -1,6 +1,8 @@
 import { useStore } from '../store.js'
-import { KIND, STATUS, fmtNum, fmtPct } from '../format.js'
+import { STATUS, fmtNum, fmtPct } from '../format.js'
+import { STATUS_COLORS, fieldsFor, isDemand, typeOf } from '../lib/nodeTypes.js'
 import { Badge, Drawer, Meter, cn } from './ui/index.js'
+import { TypeIcon } from './NodeTypeIcon.jsx'
 
 /** Diverging SHAP bars: right = raises predicted impact, left = lowers it. */
 function ShapBars({ factors }) {
@@ -43,44 +45,72 @@ function Metric({ label, value }) {
   )
 }
 
+/** Builder fields (material, priority, ...) shown with the same labels and units as the form. */
+function Details({ node }) {
+  const details = node.details || {}
+  const { common, specific } = fieldsFor(node.kind)
+  const defs = Object.fromEntries([...common, ...specific].map((f) => [f.key, f]))
+  const rows = Object.entries(details).filter(([k, v]) => k !== 'status' && v !== null && v !== '' && v !== false)
+  if (!rows.length) return null
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-semibold text-fg">Site details</h3>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex flex-col">
+            <dt className="text-fg-muted">
+              {defs[k]?.label || k.replaceAll('_', ' ')}
+              {defs[k]?.unit && <span className="text-fg-muted/80"> ({defs[k].unit})</span>}
+            </dt>
+            <dd className="font-medium text-fg">{typeof v === 'number' ? fmtNum(v, 2) : String(v)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
 /** Side drawer opened by clicking a node in either the 2D or 3D view. */
 export default function NodeDrawer() {
   const { selectedNode, selectNode, network, upload, tab, sim, day } = useStore()
-  const source = tab === 'twin' && upload?.network ? upload.network : network
-  const node = source?.nodes.find((n) => n.id === selectedNode)
+  const source = tab === 'twin' && upload?.network && !upload.activated ? upload.network : network
+  const node = source?.nodes?.find((n) => n.id === selectedNode)
   const row = sim && tab !== 'twin' ? sim.timeline[day] : null
   const status = row?.node_status?.[node?.id]
   const util = row?.utilization?.[node?.id] ?? node?.utilization
+  const type = typeOf(node?.kind)
+  const demand = node && isDemand(node.kind)
   return (
     <Drawer
       open={Boolean(node)}
       onClose={() => selectNode(null)}
       title={node ? `${node.id} · ${node.name || node.city}` : ''}
-      subtitle={node ? `${KIND[node.kind].label} · ${node.city}` : ''}
+      subtitle={node ? `${type.label}${node.city ? ` · ${node.city}` : ''}` : ''}
     >
       {node && (
         <div className="space-y-6">
           <div className="flex flex-wrap gap-1.5">
             <Badge>
-              <span className={cn('h-2 w-2 rounded-sm', KIND[node.kind].swatch)} aria-hidden />
-              {KIND[node.kind].label}
+              <TypeIcon kind={node.kind} size="xs" />
+              {type.label}
             </Badge>
             {status && (
               <Badge tone={STATUS[status].tone} dot>
-                {STATUS[status].label} on day {day}
+                <span style={{ color: STATUS_COLORS[status].color }}>{STATUS[status].label}</span> on day {day}
               </Badge>
             )}
             {node.backup && <Badge tone="accent">Backup supplier</Badge>}
+            {demand && <Badge>Demand point</Badge>}
           </div>
 
           <dl className="grid grid-cols-2 gap-2">
-            <Metric label="Criticality" value={fmtPct(node.risk)} />
+            <Metric label="Criticality" value={node.risk == null ? 'n/a' : fmtPct(node.risk)} />
             <Metric label="Reliability" value={fmtPct(node.reliability)} />
-            <Metric label={node.kind === 'customer' ? 'Demand / day' : 'Capacity / day'} value={fmtNum(node.kind === 'customer' ? node.demand : node.capacity)} />
+            <Metric label={demand ? 'Demand / day' : 'Capacity / day'} value={fmtNum(demand ? node.demand : node.capacity)} />
             <Metric label="Stock" value={fmtNum(node.stock)} />
           </dl>
 
-          {node.kind !== 'customer' && (
+          {(!demand || node.capacity > 0) && (
             <div>
               <div className="mb-1.5 flex justify-between text-xs">
                 <span className="text-fg-muted">Utilization{row ? ` · day ${day}` : ' · baseline'}</span>
@@ -91,10 +121,18 @@ export default function NodeDrawer() {
             </div>
           )}
 
+          <Details node={node} />
+
           <div>
             <h3 className="mb-1 text-xs font-semibold text-fg">Why this criticality score</h3>
-            <p className="mb-3 text-xs text-fg-muted">SHAP contributions to the predicted share of demand lost if this site fails.</p>
-            <ShapBars factors={node.top_factors} />
+            {node.risk == null ? (
+              <p className="text-xs text-fg-muted">{node.risk_note || 'The risk model has not scored this node.'}</p>
+            ) : (
+              <>
+                <p className="mb-3 text-xs text-fg-muted">SHAP contributions to the predicted share of demand lost if this site fails.</p>
+                <ShapBars factors={node.top_factors} />
+              </>
+            )}
           </div>
         </div>
       )}

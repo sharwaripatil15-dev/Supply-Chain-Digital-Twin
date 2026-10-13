@@ -2,6 +2,7 @@ import { ArrowRight, Boxes, Factory, Route, Truck } from 'lucide-react'
 import { useStore } from '../store.js'
 import { fmtNum, fmtPct, fmtSigned } from '../format.js'
 import { Badge, Card, CardBody, CardHeader, Table, Td, Th, Tr } from './ui/index.js'
+import { NodeTag } from './NodeTypeIcon.jsx'
 
 const ACTION_LABEL = {
   'pre-position': 'Pre-position',
@@ -25,7 +26,7 @@ function Path({ nodes, muted }) {
       {nodes.map((n, i) => (
         <span key={`${n}-${i}`} className="inline-flex items-center">
           {i > 0 && <ArrowRight className="mx-0.5 h-3 w-3 text-fg-muted" aria-hidden />}
-          <span className={muted ? '' : 'font-medium'}>{n}</span>
+          {muted ? <span>{n}</span> : <NodeTag id={n} showName={false} />}
         </span>
       ))}
     </span>
@@ -35,7 +36,10 @@ function Path({ nodes, muted }) {
 export default function AlternatesPanel() {
   const { recover } = useStore()
   if (!recover) return null
-  const { alternate_suppliers: sup, alternate_routes: routes, inventory_actions: inv, production_actions: prod } = recover
+  const sup = recover.alternate_suppliers ?? []
+  const routes = recover.alternate_routes ?? []
+  const inv = recover.inventory_actions ?? []
+  const prod = recover.production_actions ?? []
 
   return (
     <div className="grid gap-6 xl:grid-cols-2">
@@ -54,11 +58,9 @@ export default function AlternatesPanel() {
             {sup.map((s) => (
               <Tr key={`${s.replaces}-${s.supplier}`}>
                 <Td>
-                  <div className="font-medium text-fg">
-                    {s.supplier} <span className="font-normal text-fg-2">{s.name}</span>
-                  </div>
-                  <div className="text-xs text-fg-muted">
-                    replaces {s.replaces} · {s.city}
+                  <NodeTag id={s.supplier} size="sm" />
+                  <div className="mt-0.5 flex items-center gap-1 text-xs text-fg-muted">
+                    replaces <NodeTag id={s.replaces} showName={false} /> · {s.city}
                   </div>
                   {s.reason && <p className="mt-1 max-w-sm text-xs text-fg-2">{s.reason}</p>}
                 </Td>
@@ -119,9 +121,13 @@ export default function AlternatesPanel() {
               <Tr key={i}>
                 <Td className="tabular text-fg-muted">{a.day}</Td>
                 <Td>
-                  <div className="font-medium text-fg">
-                    {ACTION_LABEL[a.action] || a.action} at {a.node}
-                    {a.source && <span className="font-normal text-fg-2"> from {a.source}</span>}
+                  <div className="flex flex-wrap items-center gap-1 font-medium text-fg">
+                    {ACTION_LABEL[a.action] || a.action} at <NodeTag id={a.node} showName={false} />
+                    {a.source && (
+                      <span className="inline-flex items-center gap-1 font-normal text-fg-2">
+                        from <NodeTag id={a.source} showName={false} />
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-fg-muted">{a.reason}</p>
                 </Td>
@@ -146,8 +152,9 @@ export default function AlternatesPanel() {
               <Tr key={i}>
                 <Td className="tabular text-fg-muted">{p.start_day}</Td>
                 <Td>
-                  <div className="font-medium text-fg">
-                    {p.from_factory} → {p.to_factory} <span className="font-normal text-fg-2">for {p.duration} days</span>
+                  <div className="flex flex-wrap items-center gap-1 font-medium text-fg">
+                    <NodeTag id={p.from_factory} showName={false} /> → <NodeTag id={p.to_factory} showName={false} />
+                    <span className="font-normal text-fg-2">for {p.duration} days</span>
                   </div>
                   <p className="text-xs text-fg-muted">{p.reason}</p>
                 </Td>

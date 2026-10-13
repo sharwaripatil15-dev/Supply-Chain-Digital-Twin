@@ -6,7 +6,7 @@ rank_alternate_suppliers: for each disrupted supplier s, candidates are the othe
         lead  = fastest lane to one of those factories (days)
         spare = capacity - baseline output (the backup's whole capacity is spare)
     combined as 0.4 x cost rank + 0.3 x lead rank + 0.3 x spare rank (lower is better), with a reason string.
-rank_alternate_routes: for every customer whose main baseline path (follow the largest inbound flow upstream)
+rank_alternate_routes: for every demand node (retailer or customer) whose main baseline path (follow the largest inbound flow upstream)
     crosses a disrupted node or lane, find the cheapest path from any working supplier on the graph minus the
     disrupted elements and minus lanes/sites with no spare capacity at baseline, and report old -> new with
     delay_delta (lead days) and cost_delta (INR/unit).
@@ -19,6 +19,7 @@ import networkx as nx
 
 from core.optimizer import lane_cost
 from core.sim import solve_flow
+from node_types import is_demand
 
 
 def _baseline_flow(G: nx.DiGraph) -> dict:
@@ -41,11 +42,12 @@ def rank_alternate_suppliers(G: nx.DiGraph, down_suppliers: Iterable[str], top: 
             if not shared:
                 continue
             cost = sum(lane_cost(G, c, f) for f in shared) / len(shared)
-            spare = d["capacity"] if d.get("backup") else max(0.0, d["capacity"] - base["throughput"].get(c, 0.0))
+            cap = d.get("capacity") or 0.0
+            spare = cap if d.get("backup") else max(0.0, cap - base["throughput"].get(c, 0.0))
             if spare < 1:
                 continue  # already running flat out: not an alternative
             cands.append({
-                "replaces": s, "supplier": c, "name": d.get("name", c), "city": d["city"],
+                "replaces": s, "supplier": c, "name": d.get("name") or c, "city": d.get("city") or "",
                 "spare_capacity": round(spare),
                 "lead": min(G.edges[c, f]["lead"] for f in shared),
                 "cost_premium_pct": round(100 * (cost - own_cost) / own_cost, 1) if own_cost else 0.0,
@@ -70,11 +72,11 @@ def rank_alternate_suppliers(G: nx.DiGraph, down_suppliers: Iterable[str], top: 
 
 
 def _main_path(G: nx.DiGraph, flow: dict, customer: str) -> list[str]:
-    """Follow the largest inbound baseline flow upstream from a customer to a supplier."""
+    """Follow the largest inbound baseline flow upstream from a demand node to a supplier."""
     path = [customer]
     node = customer
     while G.nodes[node]["kind"] != "supplier":
-        preds = list(G.predecessors(node))
+        preds = [p for p in G.predecessors(node) if p not in path]  # never loop on a cyclic import
         if not preds:
             break
         node = max(preds, key=lambda p: flow.get((p, node), 0.0))
@@ -107,8 +109,8 @@ def rank_alternate_routes(
     H.remove_edges_from(down_edges)
     # only route through lanes and sites with spare capacity (saturated ones cannot take rerouted volume)
     H.remove_edges_from([(u, v) for u, v, d in G.edges(data=True) if d["capacity"] - base["flow"].get((u, v), 0.0) < 1])
-    H.remove_nodes_from([n for n, d in G.nodes(data=True) if d["kind"] != "customer" and not d.get("backup")
-                         and d["capacity"] - base["throughput"].get(n, 0.0) < 1])
+    H.remove_nodes_from([n for n, d in G.nodes(data=True) if not is_demand(d["kind"]) and not d.get("backup")
+                         and (d.get("capacity") or 0.0) - base["throughput"].get(n, 0.0) < 1])
     for u, v in H.edges:
         H.edges[u, v]["w"] = lane_cost(G, u, v)
     src = "__SRC__"
@@ -119,7 +121,7 @@ def rank_alternate_routes(
 
     routes = []
     for c, d in G.nodes(data=True):
-        if d["kind"] != "customer":
+        if not is_demand(d["kind"]):
             continue
         old = _main_path(G, base["flow"], c)
         hit = [n for n in old if n in down_nodes] + [f"{a}->{b}" for a, b in zip(old, old[1:]) if (a, b) in down_edges]
@@ -128,8 +130,9 @@ def rank_alternate_routes(
         new = nx.shortest_path(H, src, c, weight="w")[1:]
         spare = min(
             [G.edges[a, b]["capacity"] - base["flow"].get((a, b), 0.0) for a, b in zip(new, new[1:])]
-            + [G.nodes[n]["capacity"] - base["throughput"].get(n, 0.0) for n in new if G.nodes[n]["kind"] != "customer"
-               and not G.nodes[n].get("backup")]
+            + [(G.nodes[n].get("capacity") or 0.0) - base["throughput"].get(n, 0.0) for n in new
+               if not is_demand(G.nodes[n]["kind"]) and not G.nodes[n].get("backup")]
+            or [0.0]
         )
         routes.append({
             "origin": new[0], "destination": c, "via": new, "old_via": old, "replaces": hit[0],

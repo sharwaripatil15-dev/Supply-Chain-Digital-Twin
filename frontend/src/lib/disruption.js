@@ -48,12 +48,13 @@ export const TIER_OFFSET = {
   supplier: [-0.35, 0.28],
   factory: [-0.12, 0.1],
   warehouse: [0.12, -0.1],
+  retailer: [0.24, -0.2],
   customer: [0.35, -0.28],
 }
 
 export function nodePosition(n) {
-  const [dx, dy] = TIER_OFFSET[n.kind] || [0, 0]
-  return [n.lon + dx, n.lat + dy]
+  const [dx, dy] = TIER_OFFSET[n?.kind] || [0, 0]
+  return [Number(n?.lon) + dx || 0, Number(n?.lat) + dy || 0]
 }
 
 let webglSupport

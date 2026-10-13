@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   Sun,
 } from 'lucide-react'
-import { useStore } from '../../store.js'
+import { SOURCE_LABEL, useStore } from '../../store.js'
 import { useTheme } from '../../theme.jsx'
 import { API_URL } from '../../api.js'
 import { eventLabel } from '../../format.js'
@@ -109,7 +109,7 @@ function Sidebar({ collapsed, onToggle }) {
 }
 
 function TopBar() {
-  const { tab, events, sim, network, chaos } = useStore()
+  const { tab, events, sim, network, chaos, source, setTab } = useStore()
   const { theme, toggle } = useTheme()
   const page = PAGES.find((p) => p.id === tab)
   const resilience = chaos?.resilience_score ?? network?.resilience_score
@@ -118,6 +118,14 @@ function TopBar() {
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-bg/85 px-6 backdrop-blur">
       <h1 className="text-sm font-semibold text-fg">{page?.title}</h1>
       <div className="ml-auto flex items-center gap-2">
+        {source && (
+          <button type="button" onClick={() => setTab('data')} className="rounded-md" title="Active network source: change it on the Data tab">
+            <Badge tone={source.runnable ? 'accent' : 'warn'} icon={Database} className="cursor-pointer hover:brightness-95">
+              {SOURCE_LABEL[source.source]}
+              {!source.runnable && ' · needs fixes'}
+            </Badge>
+          </button>
+        )}
         <Badge tone={sim ? 'accent' : 'neutral'} dot title="Active scenario" className="hidden max-w-[260px] truncate md:inline-flex">
           {scenario}
         </Badge>

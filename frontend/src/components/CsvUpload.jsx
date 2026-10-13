@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CircleCheck, Download, FileSpreadsheet, TriangleAlert, Upload } from 'lucide-react'
+import { CheckCircle2, CircleCheck, Download, FileSpreadsheet, TriangleAlert, Upload } from 'lucide-react'
 import { useStore } from '../store.js'
 import { Badge, Button, Card, CardBody, CardHeader, InlineError, useToast } from './ui/index.js'
 
@@ -19,20 +19,34 @@ function FilePick({ label, file, onChange }) {
 }
 
 export default function CsvUpload() {
-  const { upload, uploadCsv, clearUpload, loading, errors, setTab } = useStore()
+  const { upload, uploadCsv, clearUpload, loading, errors, setTab, source, setSource } = useStore()
   const toast = useToast()
   const [nodes, setNodes] = useState(null)
   const [edges, setEdges] = useState(null)
-  const [activate, setActivate] = useState(false)
+  const [activate, setActivate] = useState(true)
+  const csvActive = source?.source === 'csv'
 
   const submit = async () => {
     const res = await uploadCsv(nodes, edges, activate)
-    if (res) toast('Network uploaded', { description: `${res.summary.n_nodes} nodes · ${res.summary.n_edges} lanes${res.warnings.length ? ` · ${res.warnings.length} warning(s)` : ''}` })
+    if (res) {
+      toast(res.activated ? 'Uploaded network is now active' : 'Network uploaded for preview', {
+        description: `${res.summary.n_nodes} nodes · ${res.summary.n_edges} lanes${res.warnings.length ? ` · ${res.warnings.length} warning(s)` : ''}`,
+      })
+    }
+  }
+  const activateLoaded = async () => {
+    const res = await setSource('csv')
+    if (res.ok) toast('Uploaded network is now active', { description: 'Every tab now uses it' })
   }
 
   return (
     <Card>
-      <CardHeader title="Load your network" description="Upload nodes.csv and edges.csv; files are validated before anything changes." icon={FileSpreadsheet} />
+      <CardHeader
+        title="Load your network from CSV"
+        description="Upload nodes.csv and edges.csv; files are validated before anything changes."
+        icon={FileSpreadsheet}
+        actions={csvActive && <Badge tone="ok" dot>Active on every tab</Badge>}
+      />
       <CardBody className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <FilePick label="nodes.csv" file={nodes} onChange={setNodes} />
@@ -47,15 +61,23 @@ export default function CsvUpload() {
           <a className="font-medium text-accent hover:underline" href="/samples/sample_edges.csv" download>
             sample_edges.csv
           </a>
+          <span>· kind is one of supplier, factory, warehouse, retailer, customer</span>
         </div>
         <label className="flex items-start gap-2 text-xs text-fg-2">
           <input type="checkbox" className="mt-0.5" checked={activate} onChange={(e) => setActivate(e.target.checked)} />
-          Use for the live engine (routers with USE_MOCK_*=false). Mock routers always use the demo network.
+          Use it as the active network (Twin, Simulate, Chaos Finder and Recover all switch to it). Unchecked = preview on the Twin tab only.
         </label>
-        <Button variant="primary" icon={Upload} disabled={!nodes || !edges || loading.upload} onClick={submit}>
-          {loading.upload ? 'Validating…' : 'Upload and preview'}
-        </Button>
-        <InlineError message={errors.upload} />
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" icon={Upload} disabled={!nodes || !edges || loading.upload} onClick={submit}>
+            {loading.upload ? 'Validating…' : activate ? 'Upload and activate' : 'Upload and preview'}
+          </Button>
+          {source?.csv_loaded && !csvActive && (
+            <Button icon={CheckCircle2} onClick={activateLoaded} disabled={loading.source}>
+              Activate the last upload
+            </Button>
+          )}
+        </div>
+        <InlineError message={errors.upload || errors.source} />
         {upload && (
           <div className="space-y-2 rounded-lg border border-border bg-surface-2/50 p-3 text-xs">
             <div className="flex items-start gap-2 text-fg">
@@ -67,7 +89,7 @@ export default function CsvUpload() {
                   .join(', ')}
                 ).
               </span>
-              {upload.activated && <Badge tone="accent">Live engine</Badge>}
+              {upload.activated && <Badge tone="accent">Active</Badge>}
             </div>
             {upload.warnings.map((w) => (
               <div key={w} className="flex items-start gap-2 text-fg-2">
@@ -77,10 +99,17 @@ export default function CsvUpload() {
             ))}
             <div className="flex gap-2 pt-1">
               <Button size="sm" onClick={() => setTab('twin')}>
-                Preview on Twin
+                {upload.activated ? 'Open the Twin' : 'Preview on Twin'}
               </Button>
-              <Button size="sm" variant="ghost" onClick={clearUpload}>
-                Back to demo network
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  clearUpload()
+                  if (csvActive) await setSource('preset')
+                }}
+              >
+                Back to the preset demo
               </Button>
             </div>
           </div>
