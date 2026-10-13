@@ -11,6 +11,7 @@ import UtilizationBars from '../components/UtilizationBars.jsx'
 import DelayChart from '../components/DelayChart.jsx'
 import EventLog from '../components/EventLog.jsx'
 import MonteCarloChart from '../components/MonteCarloChart.jsx'
+import RiskPredictPanel from '../components/RiskPredictPanel.jsx'
 
 export default function SimulatePage() {
   const { sim, day, events, network } = useStore()
@@ -23,8 +24,9 @@ export default function SimulatePage() {
       <PageHeader title="Disruption simulator" description="Throw disruptions at the network and watch the ripple travel day by day." />
       <KpiCards />
       <div className="mt-6 grid gap-6 xl:grid-cols-12">
-        <div className="xl:col-span-4 2xl:col-span-3">
+        <div className="xl:col-span-4 2xl:col-span-3 space-y-6">
           <ScenarioPanel />
+          <RiskPredictPanel />
         </div>
         <div className="space-y-6 xl:col-span-8 2xl:col-span-9">
           <GraphPanel
@@ -50,3 +52,4 @@ export default function SimulatePage() {
     </>
   )
 }
+

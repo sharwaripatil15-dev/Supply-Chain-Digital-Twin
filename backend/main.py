@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from routers import chaos, forecast, network, parse, recover, simulate, upload
+from routers import chaos, forecast, network, parse, recover, risk, simulate, upload
 
 logging.basicConfig(level=logging.INFO)
 
@@ -26,7 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (network, simulate, chaos, recover, parse, forecast, upload):
+for r in (network, simulate, chaos, recover, parse, forecast, upload, risk):
     app.include_router(r.router)
 
 

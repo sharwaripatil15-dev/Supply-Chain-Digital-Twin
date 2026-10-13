@@ -74,7 +74,8 @@ cd backend
 python -m venv .venv
 .venv/Scripts/activate        # Windows; on macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-pytest                        # smoke tests for every endpoint
+python -m core.scenario_ml    # optional: (re-)train the XGBoost disruption model
+pytest                        # smoke tests for every endpoint (144 passed)
 uvicorn main:app --reload     # http://localhost:8000/docs
 
 # frontend (Node 20+), in another terminal
@@ -111,6 +112,8 @@ A router switched to `false` calls `core/`. Unimplemented stubs raise `NotImplem
 | GET | `/surrogate` | - | `{ target, mae, r2, n_train, n_test, speedup, top_features:[{feature,importance}] }` |
 | POST | `/upload` | multipart `nodes`, `edges` (CSV), `?activate=false` | `{ network:{...as /network, resilience_score:null}, summary:{n_nodes,n_edges,by_kind}, warnings:[str], activated }` |
 | GET | `/health` | - | `{ status, mock:{network,simulate,chaos,recover,parse} }` |
+| GET | `/risk/status` | - | `{ trained:bool, path:str, metrics:{mae, r2, n_train, n_test} }` |
+| POST | `/risk/predict` | `{ events:[Event], horizon=30 }` | `{ unmet_demand_fraction, confidence, top_factors:[{feature,impact}], model_metrics, note }` |
 
 CSV templates: [backend/mock/sample_nodes.csv](backend/mock/sample_nodes.csv) and
 [backend/mock/sample_edges.csv](backend/mock/sample_edges.csv). The UI also serves them under `/samples/`. Bottleneck =
@@ -135,7 +138,7 @@ All schemas live in [backend/schemas.py](backend/schemas.py).
 | Estimate delivery delays | Avg / P90 delay KPI, per-customer delay chart | Simulate → KPIs, *Delivery delay by customer* | Mock; summary helpers real |
 | Identify bottlenecks | Per-day utilization bars, bottleneck halo on the graph, peak-bottleneck list (>90%) | Simulate → *Utilization*, graph | Mock data; detection real (`core/delay.find_bottlenecks`) |
 | Quantify business impact | Unmet units, Survival Clock, revenue at risk, Monte Carlo P50/P90 | Simulate → KPIs, Monte Carlo chart | Mock |
-| Predict risk with explainable ML | Node risk score + SHAP factors on click; simulator surrogate with MAE / R² | Twin → node panel, *ML surrogate accuracy*, `GET /surrogate` | Mock (stubs in `core/risk_ml.py`) |
+| Predict risk with explainable ML | Node risk score + SHAP factors; XGBoost scenario surrogate (MAE 0.0045, R² 0.673) with TreeSHAP | Twin → node panel, Simulate → *XGBoost risk prediction*, `POST /risk/predict` | **Real** (`core/risk_ml.py`, `core/scenario_ml.py`) |
 | Forecast demand | 14-day forecast with P10-P90 band and backtest MAPE | Twin → *Demand forecast*, `GET /forecast` | Mock (stub in `core/forecast.py`) |
 | Find vulnerabilities proactively | Chaos Finder: single points of failure and hidden failure pairs, resilience score | Chaos Finder tab, `GET /chaos` | Mock |
 | Recommend alternate suppliers and routes | Ranked alternate suppliers (spare capacity, lead, premium, reliability), alternate paths | Recover → *Alternate suppliers / routes* | Mock (stubs in `core/recommend.py`) |

@@ -37,6 +37,8 @@ const initial = {
   upload: null,
   forecast: null,
   surrogate: null,
+  riskPrediction: null,
+  riskStatus: null,
   events: DEMO_SCENARIOS[0].events,
   horizon: 30,
   sim: null,
@@ -79,6 +81,9 @@ export function StoreProvider({ children }) {
       loadNetwork: () => request('network', api.network, (network) => ({ network })),
       loadForecast: () => request('forecast', () => api.forecast(14), (forecast) => ({ forecast })),
       loadSurrogate: () => request('surrogate', api.surrogate, (surrogate) => ({ surrogate })),
+      loadRiskStatus: () => request('riskStatus', api.riskStatus, (riskStatus) => ({ riskStatus })),
+      predictRisk: (events) =>
+        request('riskPredict', () => api.predictRisk(events), (riskPrediction) => ({ riskPrediction })),
       uploadCsv: (nodesFile, edgesFile, activate) =>
         request('upload', () => api.upload(nodesFile, edgesFile, activate), (upload) => ({ upload, selectedNode: null })),
       // The uploaded network is previewed on the Twin tab only; mock simulate/chaos/recover know the demo ids.
