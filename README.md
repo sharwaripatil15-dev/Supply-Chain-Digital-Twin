@@ -1,4 +1,7 @@
+
 # AEGIS: AI Supply Chain Digital Twin & Disruption Simulator
+
+A real world problem - https://www.imf.org/en/publications/wp/issues/2022/02/15/supply-bottlenecks-where-why-how-much-and-what-next-513188
 
 > See the disruption coming, find the failure nobody tested for, and pick a fix that doesn't break something else.
 
