@@ -468,3 +468,44 @@ class RiskModelStatusResponse(BaseModel):
     trained: bool
     path: str
     metrics: RiskModelMetrics | None = None
+
+
+# ---------------------------------------------------------------- AI Advisory & Recommendations
+class AdvisorySummary(BaseModel):
+    network_health: str
+    resilience_score: float
+    critical_sites_count: int
+    top_spof_node: str | None = None
+    ml_engine: str
+
+
+class BottleneckItem(BaseModel):
+    node_id: str
+    name: str
+    city: str
+    kind: str
+    risk: float
+    utilization: float
+    spof_unmet_share: float
+    top_shap_factors: list[RiskFactor] = []
+    driver_summary: str
+    is_backup: bool = False
+
+
+class RecommendationItem(BaseModel):
+    id: str
+    priority: Literal["critical", "high", "medium"]
+    category: str
+    title: str
+    target_node: str
+    ml_insight: str
+    suggested_action: str
+    expected_impact: str
+    simulation_event: Event | None = None
+
+
+class AdvisoryResponse(BaseModel):
+    summary: AdvisorySummary
+    bottlenecks: list[BottleneckItem]
+    recommendations: list[RecommendationItem]
+

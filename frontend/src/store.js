@@ -10,12 +10,14 @@ export const DEMO_SCENARIOS = [
     id: 'supplier',
     label: 'Supplier failure',
     blurb: 'Chennai Electronics (S2) goes dark for 10 days.',
+    category: 'Node Outage',
     events: [{ type: 'node', target: 'S2', start: 2, duration: 10, severity: 1 }],
   },
   {
     id: 'route',
     label: 'Chennai route blocked + demand spike',
     blurb: 'Bengaluru to Sriperumbudur lane flooded; Bengaluru demand +50%.',
+    category: 'Multi-Disruption',
     events: [
       { type: 'edge', target: 'F1->W3', start: 3, duration: 8, severity: 1 },
       { type: 'demand', target: 'C3', start: 4, duration: 6, severity: 0.5 },
@@ -25,10 +27,35 @@ export const DEMO_SCENARIOS = [
     id: 'cascade',
     label: 'Cascading failure',
     blurb: 'S2 outage, then Nagpur hub fire, then Pune lane disruption.',
+    category: 'Cascading Chain',
     events: [
       { type: 'node', target: 'S2', start: 1, duration: 12, severity: 1 },
       { type: 'node', target: 'W4', start: 5, duration: 8, severity: 0.9 },
       { type: 'edge', target: 'S1->F1', start: 6, duration: 6, severity: 0.7 },
+    ],
+  },
+  {
+    id: 'warehouse-spof',
+    label: 'Warehouse SPOF bottleneck',
+    blurb: 'Bhiwandi DC (W1) total outage for 7 days.',
+    category: 'AI Bottleneck SPOF',
+    events: [{ type: 'node', target: 'W1', start: 1, duration: 7, severity: 1 }],
+  },
+  {
+    id: 'factory-shift',
+    label: 'Factory assembly breakdown',
+    blurb: 'Bengaluru Assembly (F1) goes down at 80% loss for 8 days.',
+    category: 'Production Constraint',
+    events: [{ type: 'node', target: 'F1', start: 2, duration: 8, severity: 0.8 }],
+  },
+  {
+    id: 'demand-surge',
+    label: 'Regional demand surge',
+    blurb: 'Mumbai (C1) and Bengaluru (C3) demand +60% for 6 days.',
+    category: 'Demand Shock',
+    events: [
+      { type: 'demand', target: 'C1', start: 2, duration: 6, severity: 0.6 },
+      { type: 'demand', target: 'C3', start: 3, duration: 6, severity: 0.6 },
     ],
   },
 ]
@@ -44,6 +71,8 @@ const initial = {
   surrogate: null,
   riskPrediction: null,
   riskStatus: null,
+  advisory: null,
+  alternates: null,
   events: DEMO_SCENARIOS[0].events,
   horizon: 30,
   sim: null,
@@ -179,6 +208,8 @@ export function StoreProvider({ children }) {
       loadRiskStatus: () => request('riskStatus', api.riskStatus, (riskStatus) => ({ riskStatus })),
       predictRisk: (events) =>
         request('riskPredict', () => api.predictRisk(events), (riskPrediction) => ({ riskPrediction })),
+      loadAdvisory: () => request('advisory', api.advisory, (advisory) => ({ advisory })),
+      loadAlternates: (events = []) => request('alternates', () => api.alternates(events), (alternates) => ({ alternates })),
       uploadCsv: async (nodesFile, edgesFile, activate) => {
         const res = await request('upload', () => api.upload(nodesFile, edgesFile, activate), (upload) => ({ upload, selectedNode: null }))
         if (res?.activated) await loadNetwork()

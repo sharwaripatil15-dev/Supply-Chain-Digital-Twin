@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from network_store import NetworkEditError, store
-from routers import chaos, forecast, network, network_builder, parse, recover, risk, simulate, upload
+from routers import advisory, chaos, forecast, network, network_builder, parse, recover, risk, simulate, upload
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("aegis")
@@ -28,7 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (network_builder, network, simulate, chaos, recover, parse, forecast, upload, risk):
+for r in (network_builder, network, simulate, chaos, recover, parse, forecast, upload, risk, advisory):
     app.include_router(r.router)
 
 

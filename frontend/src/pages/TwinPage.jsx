@@ -5,6 +5,7 @@ import { NODE_KINDS, isDemand, typeOf } from '../lib/nodeTypes.js'
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, InlineError, Meter, PageHeader, Stat } from '../components/ui/index.js'
 import GraphPanel from '../components/GraphPanel.jsx'
 import { NodeTag } from '../components/NodeTypeIcon.jsx'
+import AiAdvisoryPanel from '../components/AiAdvisoryPanel.jsx'
 
 export default function TwinPage() {
   const store = useStore()
@@ -49,7 +50,7 @@ export default function TwinPage() {
         description="Every supplier, plant, warehouse, retailer and customer in the network, with ML-predicted criticality."
         actions={
           <Button variant="primary" iconRight={ArrowRight} onClick={() => setTab('simulate')} disabled={source && !source.runnable}>
-            Simulate a disruption
+            Open Disruption Simulator
           </Button>
         }
       />
@@ -124,6 +125,10 @@ export default function TwinPage() {
             {critical.length > 0 && <p className="mt-3 text-xs text-fg-muted">Select a site to see why (SHAP).</p>}
           </CardBody>
         </Card>
+      </div>
+
+      <div className="mt-6">
+        <AiAdvisoryPanel />
       </div>
     </>
   )

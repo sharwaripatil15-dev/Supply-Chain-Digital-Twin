@@ -221,6 +221,25 @@ def node_risk_with_shap(G: nx.DiGraph, top_k: int = 4) -> dict[str, dict]:
 
 def _score(G: nx.DiGraph, top_k: int) -> dict[str, dict]:
     import shap
+    import shap.explainers._tree as _st
+
+    if hasattr(_st, "decode_ubjson_buffer") and not getattr(_st, "_aegis_patched", False):
+        _orig_decode = _st.decode_ubjson_buffer
+
+        def _safe_decode(fd):
+            res = _orig_decode(fd)
+            try:
+                lmp = res.get("learner", {}).get("learner_model_param", {})
+                if "base_score" in lmp:
+                    bs = lmp["base_score"]
+                    if isinstance(bs, str) and bs.startswith("["):
+                        lmp["base_score"] = bs.strip("[]")
+            except Exception:
+                pass
+            return res
+
+        _st.decode_ubjson_buffer = _safe_decode
+        _st._aegis_patched = True
 
     from core.chaos import failure_loss
 

@@ -18,6 +18,9 @@ export const api = {
   surrogate: () => data(client.get('/surrogate')),
   riskStatus: () => data(client.get('/risk/status')),
   predictRisk: (events, horizon = 30) => data(client.post('/risk/predict', { events, horizon })),
+  advisory: () => data(client.get('/ai-advisory')),
+  alternates: (events = [], down_suppliers = [], down_lanes = []) =>
+    data(client.post('/recommend/alternates', { events, down_suppliers, down_lanes })),
   upload: (nodesFile, edgesFile, activate = false) => {
     const form = new FormData()
     form.append('nodes', nodesFile)

@@ -3,12 +3,19 @@ import { useStore } from './store.js'
 import AppShell from './components/layout/AppShell.jsx'
 import { Card, InlineError, Skeleton } from './components/ui/index.js'
 import TwinPage from './pages/TwinPage.jsx'
-import SimulatePage from './pages/SimulatePage.jsx'
+import WhatIfPage from './pages/WhatIfPage.jsx'
 import RecoverPage from './pages/RecoverPage.jsx'
 import DataPage from './pages/DataPage.jsx'
 import ChaosFinder from './components/ChaosFinder.jsx'
 
-const PAGES = { twin: TwinPage, simulate: SimulatePage, chaos: ChaosFinder, recover: RecoverPage, data: DataPage }
+const PAGES = {
+  twin: TwinPage,
+  whatif: WhatIfPage,
+  simulate: WhatIfPage,
+  chaos: ChaosFinder,
+  recover: RecoverPage,
+  data: DataPage,
+}
 
 function LoadingShell() {
   return (

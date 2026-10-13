@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Building2, Play, Plus, Route, Sparkles, TrendingUp, X } from 'lucide-react'
-import { DEMO_SCENARIOS, useStore } from '../store.js'
+import { useEffect, useState } from 'react'
+import { Building2, Play, Plus, Route, TrendingUp, X } from 'lucide-react'
+import { useStore } from '../store.js'
 import { eventLabel, fmtNum } from '../format.js'
 import { isDemand, typeOf } from '../lib/nodeTypes.js'
-import { scenariosFor } from '../lib/scenarios.js'
 import { Button, Card, CardBody, CardHeader, InlineError, SegmentedControl, cn, useToast } from './ui/index.js'
 
 const TYPE_ICON = { node: Building2, edge: Route, demand: TrendingUp }
@@ -70,65 +69,34 @@ function EventEditor({ ev, network, onChange }) {
 }
 
 export default function ScenarioPanel() {
-  const { network, source, events, setEvents, runSimulation, parseText, loading, errors } = useStore()
+  const { network, events, setEvents, runSimulation, loading, errors } = useStore()
   const toast = useToast()
-  const isPreset = !source || source.source === 'preset'
-  const scenarios = useMemo(() => scenariosFor(network, DEMO_SCENARIOS, isPreset), [network, isPreset])
   const [selected, setSelected] = useState(0)
-  const [text, setText] = useState('Chennai electronics supplier floods from day 2 for about 10 days, and Bengaluru demand jumps 40%.')
   const busy = Boolean(loading.sim)
+
   useEffect(() => {
     if (selected >= events.length) setSelected(Math.max(0, events.length - 1))
   }, [events.length, selected])
 
-  const run = async (evs, label) => {
+  const run = async (evs) => {
     const res = await runSimulation(evs)
-    if (res) toast(label ? `Simulated: ${label}` : 'Simulation complete', { description: `${fmtNum(res.total_unmet)} units unmet · Survival Clock ${res.survival_clock_days} days` })
-  }
-  const parse = async () => {
-    const res = await parseText(text)
-    if (res) {
-      setSelected(0)
-      toast(`Parsed ${res.events.length} event${res.events.length === 1 ? '' : 's'}`, { description: res.events.map(eventLabel).join(' · ') })
-    }
+    if (res) toast('Simulation complete', { description: `${fmtNum(res.total_unmet)} units unmet · Survival Clock ${res.survival_clock_days} days` })
   }
 
   return (
     <Card>
-      <CardHeader title="Scenario" description="Stack disruptions, then run the simulation." />
-      <CardBody className="space-y-5">
-        <section aria-label="Demo scenarios">
-          <h3 className="label mb-1.5">Quick start</h3>
-          <div className="flex flex-col gap-0.5">
-            {scenarios.length === 0 && <p className="px-2 text-xs text-fg-muted">Add a supplier and a lane to get suggested scenarios.</p>}
-            {scenarios.map((d) => (
-              <Button key={d.id} variant="ghost" disabled={busy} onClick={() => run(d.events, d.label)} className="h-auto justify-start px-2 py-1.5 text-left">
-                <span className="flex flex-col">
-                  <span className="text-sm font-medium text-fg">{d.label}</span>
-                  <span className="text-xs font-normal text-fg-muted">{d.blurb}</span>
-                </span>
-              </Button>
-            ))}
-          </div>
-        </section>
-
-        <section aria-label="Plain-English scenario">
-          <label className="label" htmlFor="scenario-text">
-            Describe it in plain English
-          </label>
-          <textarea id="scenario-text" className="input mt-1.5 h-20 resize-none" value={text} onChange={(e) => setText(e.target.value)} />
-          <Button size="sm" icon={Sparkles} className="mt-2 whitespace-nowrap" disabled={loading.parse || text.trim().length < 3} onClick={parse}>
-            {loading.parse ? 'Parsing…' : 'Parse into events'}
-          </Button>
-          <p className="mt-1.5 text-xs text-fg-muted">The LLM only extracts events; the engine computes every number.</p>
-          <InlineError className="mt-2" message={errors.parse} />
-        </section>
-
+      <CardHeader title="Disruption Events" description="Fine-tune parameters or add custom manual events." />
+      <CardBody className="space-y-4">
         <section aria-label="Scenario events">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="label">Events</h3>
+          <div className="mb-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="label">Active Events</h3>
+              <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-fg-muted">
+                {events.length}
+              </span>
+            </div>
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               icon={Plus}
               onClick={() => {
@@ -139,8 +107,11 @@ export default function ScenarioPanel() {
               Add event
             </Button>
           </div>
+
           {events.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-fg-muted">No events yet. Add one or pick a quick start.</p>
+            <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-fg-muted">
+              No events configured yet. Pick a scenario from the library above or enter a prompt in the AI simulator.
+            </p>
           ) : (
             <ul className="mb-3 flex flex-wrap gap-1.5">
               {events.map((e, i) => {
@@ -150,7 +121,7 @@ export default function ScenarioPanel() {
                     <span
                       className={cn(
                         'inline-flex h-7 items-center gap-1 rounded-md border pl-2 pr-1 text-xs font-medium transition-colors duration-150',
-                        i === selected ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border bg-surface text-fg-2 hover:border-border-strong',
+                        i === selected ? 'border-accent/40 bg-accent/10 text-accent ring-1 ring-accent/30' : 'border-border bg-surface text-fg-2 hover:border-border-strong',
                       )}
                     >
                       <button type="button" onClick={() => setSelected(i)} className="inline-flex items-center gap-1" aria-pressed={i === selected}>
@@ -174,13 +145,14 @@ export default function ScenarioPanel() {
               })}
             </ul>
           )}
+
           {events[selected] && (
             <EventEditor ev={events[selected]} network={network} onChange={(next) => setEvents(events.map((e, j) => (j === selected ? next : e)))} />
           )}
         </section>
 
-        <div className="space-y-2">
-          <Button variant="primary" icon={Play} className="w-full justify-center" disabled={busy || !events.length} onClick={() => run(events)}>
+        <div className="space-y-2 pt-1">
+          <Button variant="primary" icon={Play} className="w-full justify-center shadow-sm" disabled={busy || !events.length} onClick={() => run(events)}>
             {busy ? 'Simulating…' : 'Run simulation'}
           </Button>
           <InlineError message={errors.sim} onRetry={() => run(events)} />

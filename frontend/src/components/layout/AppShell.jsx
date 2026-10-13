@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   Activity,
   Database,
+  FlaskConical,
   LifeBuoy,
   Moon,
   Network,
@@ -20,7 +21,7 @@ import NodeDrawer from '../NodeDrawer.jsx'
 
 export const PAGES = [
   { id: 'twin', label: 'Twin', icon: Network, title: 'Digital twin' },
-  { id: 'simulate', label: 'Simulate', icon: Activity, title: 'Disruption simulator' },
+  { id: 'simulate', label: 'Simulator', icon: Activity, title: 'Disruption simulator' },
   { id: 'chaos', label: 'Chaos Finder', icon: Radar, title: 'Chaos Finder' },
   { id: 'recover', label: 'Recover', icon: LifeBuoy, title: 'Recovery planner' },
   { id: 'data', label: 'Data', icon: Database, title: 'Data & models' },
@@ -60,7 +61,7 @@ function Sidebar({ collapsed, onToggle }) {
       </div>
       <ul className="mt-2 flex-1 space-y-0.5 px-2">
         {PAGES.map((p) => {
-          const active = tab === p.id
+          const active = tab === p.id || (p.id === 'simulate' && tab === 'whatif')
           const Icon = p.icon
           const item = (
             <button
