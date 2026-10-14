@@ -4,6 +4,12 @@
 
 ### See the disruption coming. Find the failure nobody tested for. Pick a fix that doesn't break something else.
 
+<a href="https://sharwaripatil15-dev.github.io/Supply-Chain-Digital-Twin/"><img src="https://img.shields.io/badge/%E2%96%B6%20%20OPEN%20THE%20INTERACTIVE%203D%20README-8B5CF6?style=for-the-badge&labelColor=1E1B4B" alt="Open the interactive 3D README" height="40" /></a>
+
+<sub>Rotate a 3D twin of India, play real engine scenarios day by day and run the Chaos Finder · source: <a href="docs/index.html"><code>docs/index.html</code></a></sub>
+
+<br/><br/>
+
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](backend/requirements.txt)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](backend/main.py)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](frontend/package.json)
@@ -14,11 +20,17 @@
 [![Claude](https://img.shields.io/badge/LLM-Claude%20(grounded)-D97757)](backend/llm/parser.py)
 [![Tests](https://img.shields.io/badge/tests-318%20passing-15803D)](backend/tests)
 
-**[Quick start](#run-it)** · **[Feature tour](#feature-tour)** · **[Screenshots](#screenshots)** · **[Architecture](#architecture)** · **[API](#api-contract)** · **[Browser extension](#browser-extension)**
+**[3D README](https://sharwaripatil15-dev.github.io/Supply-Chain-Digital-Twin/)** · **[Quick start](#run-it)** · **[How it works](#how-it-works)** · **[Screenshots](#screenshots)** · **[Features](#feature-tour)** · **[Architecture](#architecture)** · **[API](#api-contract)** · **[Extension](#browser-extension)**
 
 </div>
 
----
+<br/>
+
+<img src="docs/images/hero-3d.svg" alt="Animated isometric digital twin: factory F1 shuts for 10 days and the failure ripples to S2, W3 and C3; Survival Clock 2 days, 1,760 units unmet" width="100%" />
+
+<p align="center"><sub>Animated. The figures are real output of <code>core/sim.py</code>, <code>core/chaos.py</code> and <code>core/strategies.py</code> on the sample network (<code>backend/mock/sample_*.csv</code>).</sub></p>
+
+<img src="docs/images/stats.svg" alt="318 tests, 24,000 simulated scenarios, 8 insight detectors, 60 candidate cities, 100x Monte Carlo replays, under 1 s ML pre-screen" width="100%" />
 
 **AEGIS** is a digital twin of a multi-tier supply chain: **suppliers → factories → warehouses → customers** on a live
 3D map of India. Throw a disruption at it (a plant fire, a flooded port, a festival demand spike) and watch the ripple
@@ -53,6 +65,24 @@ the digital twin double-checks every plan.
 </td>
 </tr>
 </table>
+
+## How it works
+
+<img src="docs/images/pipeline.svg" alt="How AEGIS works: Disrupt, Simulate, Monte Carlo, Chaos Finder, Recover, Expand" width="100%" />
+
+<details open>
+<summary><b>Three things nobody else shows you</b></summary>
+
+1. **Chaos Finder (reverse stress-test).** Don't wait for someone to ask "what if X fails?". AEGIS knocks out every
+   node and **every pair** of nodes and ranks the damage. It surfaces *hidden pairs*: two warehouses that each look
+   safe alone but together cut off a whole region (`synergy = unmet(a+b) − unmet(a) − unmet(b)`).
+2. **Survival Clock.** One number a COO understands: *days until the first customer runs out of stock*. Below it:
+   revenue at risk, and P50/P90 from a Monte Carlo over uncertain outage durations.
+3. **Fix-safety check.** The cheapest fix is often a trap: draining safety stock fixes today and creates tomorrow's
+   single point of failure. Every candidate strategy is re-stress-tested *after* it's applied; fixes that create a
+   worse vulnerability get flagged red, and the recommendation is the cheapest **safe** plan.
+
+</details>
 
 ## Screenshots
 
@@ -90,20 +120,6 @@ the digital twin double-checks every plan.
 | 🛡️ | **Grounded AI** | Claude may only re-word engine evidence; any number not in the evidence is rejected and a deterministic template is used |
 | 🧩 | **Browser extension** | Right-click any news headline → **Ask AEGIS** → simulated impact in a side panel; alert badge on the toolbar |
 | 🎬 | **Demo mode** | One click loads an FMCG story (network, analysis, what-if, expansion) and a 4-step guided tour |
-
-<details>
-<summary><b>Three things nobody else shows you</b></summary>
-
-1. **Chaos Finder (reverse stress-test).** Don't wait for someone to ask "what if X fails?". AEGIS knocks out every
-   node and **every pair** of nodes and ranks the damage. It surfaces *hidden pairs*: two warehouses that each look
-   safe alone but together cut off a whole region (`synergy = unmet(a+b) − unmet(a) − unmet(b)`).
-2. **Survival Clock.** One number a COO understands: *days until the first customer runs out of stock*. Below it:
-   revenue at risk, and P50/P90 from a Monte Carlo over uncertain outage durations.
-3. **Fix-safety check.** The cheapest fix is often a trap: draining safety stock fixes today and creates tomorrow's
-   single point of failure. Every candidate strategy is re-stress-tested *after* it's applied; fixes that create a
-   worse vulnerability get flagged red, and the recommendation is the cheapest **safe** plan.
-
-</details>
 
 ## Architecture
 
@@ -156,6 +172,36 @@ flowchart TB
 
 </details>
 
+<details>
+<summary><b>What happens when you ask "what if…?"</b> (sequence diagram)</summary>
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as You
+    participant UI as React UI
+    participant API as FastAPI /whatif/run
+    participant LLM as Claude (parse + re-word only)
+    participant SIM as Simulator + Monte Carlo
+    participant OPT as Recovery optimiser
+    participant CH as Chaos Finder
+    U->>UI: "What if Supplier S2 fails for 10 days?"
+    UI->>API: { text }
+    API->>LLM: parse text into events
+    LLM-->>API: events, validated against the graph
+    API->>SIM: baseline vs scenario, Monte Carlo replays
+    SIM-->>API: cascade, Survival Clock, P50 / P90
+    API->>OPT: build every recovery plan
+    OPT->>CH: re-stress-test each plan (fix-safety check)
+    CH-->>OPT: safe, or creates a new weak spot
+    OPT-->>API: plans ranked, cheapest safe plan recommended
+    API->>LLM: re-word the evidence (no new numbers allowed)
+    LLM-->>API: narrative, or rejected for the deterministic template
+    API-->>UI: brief + evidence + plans + confidence
+```
+
+</details>
+
 ## Tech stack
 
 **Frontend:** React 18 · Vite 8 · Tailwind CSS · Cytoscape.js · deck.gl 9 · MapLibre GL · Recharts · lucide-react ·
@@ -202,7 +248,57 @@ The active network is saved to `backend/data/active_network.json` (override with
 the `aegis-data` volume). Delete the file to start from the preset again; an unreadable file is moved aside to
 `active_network.corrupt.json` and the app starts on the preset with a notice on the Data tab.
 
-### Mock switches (one per router)
+## Interactive 3D README
+
+[`docs/index.html`](docs/index.html) is a standalone Three.js page: a 3D twin of India built from the sample network,
+a scenario player (5 engine scenarios, day slider, event log, every recovery plan compared), an animated Chaos Finder
+sweep, and the rest of this README as an interactive page (feature filter, screenshot lightbox, an architecture stack
+that pulls apart on hover, a searchable API list).
+
+| | |
+|---|---|
+| **Open it locally** | `cd docs` then `python -m http.server 8080` and open http://localhost:8080 (double-clicking `index.html` works too) |
+| **Publish it** | GitHub → *Settings* → *Pages* → *Deploy from a branch* → `main` and `/docs`. It goes live at https://sharwaripatil15-dev.github.io/Supply-Chain-Digital-Twin/ |
+| **Refresh the data** | `backend/.venv/Scripts/python.exe docs/tools/export_twin.py` re-runs the engine and rewrites `docs/twin-data.js` |
+| **Refresh the README art** | `python docs/tools/gen_svgs.py` regenerates `hero-3d.svg`, `stats.svg` and `pipeline.svg` |
+
+## Browser extension
+
+[chrome-extension/](chrome-extension/README.md) (Chrome / Edge, load unpacked): select a news headline on any page,
+right-click **Ask AEGIS** and the side panel simulates its impact on your network; the panel also shows the Health
+Score, KPIs and top risks, and the toolbar badge counts urgent alerts.
+
+## Limitations (honest)
+
+- **Synthetic data.** The network, risk factors, demand history and every number in the UI are synthetic and shaped
+  to look realistic for Indian logistics. Nothing is calibrated against real suppliers, so treat every output as
+  illustrative until it runs on real data.
+- **Mock layer is optional.** Every engine described here is implemented and tested (318 tests). The `USE_MOCK_*`
+  switches (default `true` for the preset) serve scripted demo payloads on the older Simulate / Chaos Finder /
+  Recover endpoints; set them to `false` to run the real engine everywhere. What-if, Insights, Expansion and Weather
+  always use the real engine.
+- **Prototype scale.** Networks of up to 60 nodes and 400 lanes in the builder, a single product, a 30-day horizon at
+  daily resolution. Lead times enter as delay, not shipping lag; no BOMs or multi-echelon inventory policies.
+- **In-process state.** The active network is saved to disk; what-if history, analysis and expansion results live in
+  memory and reset when the backend restarts. There are no user accounts.
+- **Surrogate scope.** The ML model is trained on simulator labels, so it is a fast surrogate validated on held-out
+  synthetic networks, not a model of real-world outcomes. Expansion site costs use illustrative indices.
+- **Scaling path, not built yet:** Neo4j for graph storage and path queries on 10k+ node networks; Redis (already
+  wired as an optional cache) for shared result caching and as a job queue for Monte Carlo and Chaos Finder batches
+  (the ML surrogate pre-screen, `GET /chaos/prescreen`, is built); PostgreSQL for
+  scenario and run history. Postgres and Neo4j are commented out in `docker-compose.yml`.
+- **LLM scope.** Claude only parses scenarios, routes follow-up questions to 3 whitelisted engine tools and re-words
+  engine evidence. Parsed events are validated against the graph, and any narration containing a number the engine
+  didn't produce is rejected in favour of a deterministic template.
+
+## Reference
+
+The detailed reference. Click a section to open it.
+
+<a id="mock-switches"></a>
+<details>
+<summary><b>🎛️ Mock switches (one per router)</b></summary>
+<br/>
 
 | Flag (default `true`) | Endpoints | When `false` |
 |---|---|---|
@@ -219,7 +315,12 @@ A router switched to `false` calls `core/`. Unimplemented stubs raise `NotImplem
 **Mocks only describe the preset.** The flags apply while the preset demo is the active network. An activated CSV
 network or a manual network always runs on the real engine (`core/`), whatever the flags say.
 
-## Data tab: three ways to define the network
+</details>
+
+<a id="data-tab-three-ways-to-define-the-network"></a>
+<details>
+<summary><b>🗂️ Data tab: three ways to define the network (preset, CSV, manual builder, validation rules)</b></summary>
+<br/>
 
 The Data tab has a **Preset demo | CSV upload | Manual builder** switch. All three produce the same thing, the *active
 network*, which Twin, Simulate, Chaos Finder and Recover all use. The top bar shows the active source; click it to
@@ -248,7 +349,12 @@ warehouse holding more than its storage capacity, a lane ignored because one end
 checked by Pydantic (422 with the field name): negative numbers, latitude outside -90..90, longitude outside -180..180,
 reliability outside 0..1, percentages outside 0..100, and fields that belong to another node type.
 
-### Node types
+</details>
+
+<a id="node-types"></a>
+<details>
+<summary><b>🔷 Node types: shapes, colors, allowed lanes, 2D and 3D views</b></summary>
+<br/>
 
 The type of a node is always **shape + color + icon**. Its status (ok / stressed / down) is a ring, glow and badge in
 the status colors (green `#22C55E`, amber `#F59E0B`, red `#EF4444`), never the fill. The definitions live in
@@ -277,7 +383,12 @@ colored by their source type, dashed red disrupted lanes, accent recovery routes
 follows lead time and whose color shows the transport mode. Both views share one legend: click a type to hide it.
 3D loads lazily, needs WebGL, and falls back to 2D on any error.
 
-### Node field reference
+</details>
+
+<a id="node-field-reference"></a>
+<details>
+<summary><b>📋 Node and lane field reference</b></summary>
+<br/>
 
 Common to every type: `id` (auto-generated as S1, F1, W1, R1, C1 ..., editable only on create; letters, digits, `-`,
 `_`), `name`, `kind`, `city` (address or city), `lat`, `lon`, `capacity` (units/day), `stock` (units), `reliability`
@@ -296,7 +407,12 @@ Lanes: `source`, `target`, `mode` (road/rail/sea/air), `distance_km`, `lead` (da
 distance / speed + handling (road 450 km/day + 0.5 d, rail 380 + 1, sea 350 + 2, air 4000 + 0.5; at least 1 day), CO₂
 per unit-km (road 0.0026, rail 0.0011, sea 0.0008, air 0.012 kg). Extra fields are kept and shown in the node drawer.
 
-## API contract
+</details>
+
+<a id="api-contract"></a>
+<details>
+<summary><b>🔌 API contract (every endpoint, network builder API, errors)</b></summary>
+<br/>
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -361,13 +477,12 @@ utilization above 90%.
 Errors: `422` invalid body or unknown node/edge id, `501` core function not implemented yet, `503` LLM unavailable.
 All schemas live in [backend/schemas.py](backend/schemas.py).
 
-## Browser extension
+</details>
 
-[chrome-extension/](chrome-extension/README.md) (Chrome / Edge, load unpacked): select a news headline on any page,
-right-click **Ask AEGIS** and the side panel simulates its impact on your network; the panel also shows the Health
-Score, KPIs and top risks, and the toolbar badge counts urgent alerts.
-
-## Expansion planner and executive dashboard
+<a id="expansion-planner-and-executive-dashboard"></a>
+<details>
+<summary><b>🗺️ Expansion planner and executive dashboard</b></summary>
+<br/>
 
 **Expansion planner** (Expansion tab, [backend/core/expansion.py](backend/core/expansion.py)). Dijkstra alone finds the
 cheapest *path*; it does not choose *locations*, so the planner works in stages:
@@ -393,7 +508,12 @@ alerts and recent scenarios. **Executive / Analyst** toggle: Analyst adds eviden
 four-step tour. **Executive brief** prints a two-page A4 summary (save as PDF); tables export to CSV. Every metric has
 one definition, shown in its tooltip ([frontend/src/lib/glossary.js](frontend/src/lib/glossary.js)).
 
-## Synthetic data, ML surrogate, what-if planner and insights
+</details>
+
+<a id="synthetic-data-ml-surrogate-what-if-planner-and-insights"></a>
+<details>
+<summary><b>🤖 Synthetic data, ML surrogate, what-if planner and insights</b></summary>
+<br/>
 
 * **Synthetic generator** ([backend/core/synth/](backend/core/synth/), assumptions in
   [backend/data/synth_assumptions.md](backend/data/synth_assumptions.md)): 7 archetypes x 6 industry profiles, 10-60
@@ -422,7 +542,12 @@ one definition, shown in its tooltip ([frontend/src/lib/glossary.js](frontend/sr
   evidence object; an LLM may only re-word them and is rejected if it writes a number that is not in the evidence
   (without an API key the deterministic template is used). Every section has an Evidence expander.
 
-## PS 04 requirements → features
+</details>
+
+<a id="ps-04-requirements--features"></a>
+<details>
+<summary><b>✅ PS 04 requirements → features</b></summary>
+<br/>
 
 > This mapping uses the PS 04 requirements as we read them from the brief. Check it against the official problem
 > statement before submitting and adjust the left column's wording to match.
@@ -448,30 +573,12 @@ one definition, shown in its tooltip ([frontend/src/lib/glossary.js](frontend/sr
 | Decide where to expand | Dijkstra + facility-location MILP + resilience check on a network copy | Expansion tab, `/expansion/*` | **Real** |
 | Executive reporting | Overview dashboard, executive brief (PDF), CSV exports, demo mode | Overview tab | **Real** |
 
-## Limitations (honest)
+</details>
 
-- **Synthetic data.** The network, risk factors, demand history and every number in the UI are synthetic and shaped
-  to look realistic for Indian logistics. Nothing is calibrated against real suppliers, so treat every output as
-  illustrative until it runs on real data.
-- **Mock layer is optional.** Every engine described here is implemented and tested (318 tests). The `USE_MOCK_*`
-  switches (default `true` for the preset) serve scripted demo payloads on the older Simulate / Chaos Finder /
-  Recover endpoints; set them to `false` to run the real engine everywhere. What-if, Insights, Expansion and Weather
-  always use the real engine.
-- **Prototype scale.** Networks of up to 60 nodes and 400 lanes in the builder, a single product, a 30-day horizon at
-  daily resolution. Lead times enter as delay, not shipping lag; no BOMs or multi-echelon inventory policies.
-- **In-process state.** The active network is saved to disk; what-if history, analysis and expansion results live in
-  memory and reset when the backend restarts. There are no user accounts.
-- **Surrogate scope.** The ML model is trained on simulator labels, so it is a fast surrogate validated on held-out
-  synthetic networks, not a model of real-world outcomes. Expansion site costs use illustrative indices.
-- **Scaling path, not built yet:** Neo4j for graph storage and path queries on 10k+ node networks; Redis (already
-  wired as an optional cache) for shared result caching and as a job queue for Monte Carlo and Chaos Finder batches
-  (the ML surrogate pre-screen, `GET /chaos/prescreen`, is built); PostgreSQL for
-  scenario and run history. Postgres and Neo4j are commented out in `docker-compose.yml`.
-- **LLM scope.** Claude only parses scenarios, routes follow-up questions to 3 whitelisted engine tools and re-words
-  engine evidence. Parsed events are validated against the graph, and any narration containing a number the engine
-  didn't produce is rejected in favour of a deterministic template.
-
-## Who owns what
+<a id="who-owns-what"></a>
+<details>
+<summary><b>👥 Who owns what</b></summary>
+<br/>
 
 | Owner | Area | Files |
 |---|---|---|
@@ -482,7 +589,12 @@ one definition, shown in its tooltip ([frontend/src/lib/glossary.js](frontend/sr
 
 Contract rule: nobody changes `schemas.py` without telling C and D. Mock and live outputs must validate against the same models.
 
-## Build phases / TODO
+</details>
+
+<a id="build-phases--todo"></a>
+<details>
+<summary><b>🛠️ Build phases / TODO (all phases done)</b></summary>
+<br/>
 
 **Phase 0: Scaffold (done)**
 - [x] API contract + Pydantic schemas, mock data for every endpoint
@@ -529,3 +641,5 @@ Contract rule: nobody changes `schemas.py` without telling C and D. Mock and liv
 - [x] Expansion planner (Dijkstra + facility-location MILP + resilience evaluation), apply as one undoable step
 - [x] Overview dashboard, Executive / Analyst views, demo mode with tour, executive brief, Weather page
 - [x] Browser extension (side panel, right-click "Ask AEGIS", alert badge)
+
+</details>

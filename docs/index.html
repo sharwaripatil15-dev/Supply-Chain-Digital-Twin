@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AEGIS 3D README</title>
+<meta name="description" content="Interactive 3D README for AEGIS, the AI supply chain digital twin: play real engine scenarios on a 3D map of India." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --bg: #05070f; --bg2: #0a0f26; --panel: rgba(11, 16, 44, .78); --line: rgba(110, 130, 255, .22);
+  --text: #e8ecff; --muted: #8f9bd0; --dim: #5d6799; --accent: #8ea0ff;
+  --sup: #8b5cf6; --fac: #2563eb; --wh: #0d9488; --cus: #64748b;
+  --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444; --gold: #fbbf24; --pink: #f472b6; --mint: #34d399;
+  --r: 16px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; overflow-x: hidden; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 Inter, system-ui, sans-serif; overflow-x: hidden; }
+a { color: var(--accent); text-decoration: none; }
+code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+button { font: inherit; color: inherit; cursor: pointer; }
+
+/* nav */
+nav { position: fixed; inset: 0 0 auto 0; z-index: 50; display: flex; align-items: center; gap: 22px; padding: 12px 24px;
+  background: linear-gradient(#05070fee, #05070f00); backdrop-filter: blur(6px); }
+nav .logo { font-weight: 800; letter-spacing: 3px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+nav .logo i { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, var(--sup), var(--fac), var(--wh)); box-shadow: 0 0 12px var(--accent); }
+nav .links { display: flex; gap: 18px; margin-left: auto; font-size: 13px; }
+nav .links a { color: var(--muted); } nav .links a:hover { color: var(--text); }
+.gh { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--text) !important; }
+
+/* hero */
+#hero { position: relative; height: 100vh; min-height: 640px; }
+#scene { position: absolute; inset: 0; overflow: hidden; }
+#scene canvas { display: block; }
+.label3d { font: 600 11px Inter, sans-serif; color: #dfe5ff; padding: 2px 7px; border-radius: 6px; background: rgba(8, 12, 36, .7);
+  border: 1px solid rgba(140, 160, 255, .25); white-space: nowrap; pointer-events: none; transition: opacity .3s; }
+.label3d.down { color: #fecaca; border-color: #ef444488; } .label3d.stressed { color: #fde68a; border-color: #f59e0b88; }
+.intro { position: absolute; left: 32px; top: 90px; max-width: 430px; pointer-events: none; }
+.intro > * { pointer-events: auto; }
+.kicker { font-size: 12px; letter-spacing: 3px; color: var(--accent); font-weight: 700; }
+.intro h1 { font-size: 46px; line-height: 1.05; margin: 10px 0 14px; font-weight: 800;
+  background: linear-gradient(120deg, #fff 10%, #b9c3ff 45%, #8ea0ff 70%, #f0abfc); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.intro p { color: var(--muted); margin: 0 0 18px; }
+.cta { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: rgba(20, 28, 70, .7); padding: 9px 16px; border-radius: 999px; font-weight: 600; font-size: 13px; transition: .2s; }
+.btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+.btn.primary { background: linear-gradient(135deg, #4f5ff0, #8b5cf6); border-color: transparent; box-shadow: 0 6px 24px #5b6cff55; }
+.legend { position: absolute; left: 32px; bottom: 26px; display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; background: var(--panel);
+  border: 1px solid var(--line); font-size: 12px; user-select: none; }
+.chip .sw { width: 10px; height: 10px; border-radius: 3px; }
+.chip.off { opacity: .35; }
+.cams { position: absolute; left: 32px; bottom: 70px; display: flex; gap: 6px; flex-wrap: wrap; }
+.cams .btn { padding: 6px 12px; font-size: 12px; }
+
+/* sim panel */
+#panel { position: absolute; right: 22px; top: 76px; bottom: 22px; width: 370px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r); backdrop-filter: blur(10px); display: flex; flex-direction: column; overflow: hidden; }
+#panel header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+.live { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 2px; font-weight: 700; color: #fca5a5; }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); animation: blink 1.4s infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+.scen { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.scen button { font-size: 11.5px; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, .03); }
+.scen button.on { background: #4f5ff0; border-color: #8ea0ff; }
+#panel .body { padding: 12px 16px; overflow-y: auto; flex: 1; scrollbar-width: thin; }
+#scenTitle { font-weight: 700; font-size: 15px; margin: 2px 0 10px; }
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpi { background: rgba(255, 255, 255, .03); border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px; }
+.kpi b { display: block; font-size: 10px; letter-spacing: 1.3px; color: var(--dim); font-weight: 700; }
+.kpi span { font-size: 21px; font-weight: 800; }
+.kpi small { display: block; color: var(--muted); font-size: 11px; }
+.player { display: flex; align-items: center; gap: 10px; margin: 12px 0 6px; }
+.player button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: #4f5ff0; flex: none; }
+.player input { flex: 1; accent-color: #8ea0ff; }
+.player .day { font-weight: 700; width: 58px; text-align: right; font-size: 13px; }
+#bars { display: flex; align-items: flex-end; gap: 3px; height: 54px; margin: 6px 0 12px; }
+#bars div { flex: 1; border-radius: 3px 3px 1px 1px; background: var(--ok); opacity: .45; min-height: 3px; transition: .3s; cursor: pointer; }
+#bars div.bad { background: var(--bad); } #bars div.cur { opacity: 1; outline: 1px solid #fff8; }
+h4 { font-size: 11px; letter-spacing: 1.5px; color: var(--dim); margin: 14px 0 6px; font-weight: 700; }
+#log { font-size: 11.5px; color: var(--muted); margin: 0; padding: 0; list-style: none; }
+#log li { padding: 3px 0 3px 10px; border-left: 2px solid var(--line); margin-bottom: 3px; animation: fadein .4s; }
+#log li.down { border-color: var(--bad); color: #fecaca; } #log li.stressed { border-color: var(--warn); }
+@keyframes fadein { from { opacity: 0; transform: translateX(6px); } }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+td, th { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+th { color: var(--dim); font-weight: 600; font-size: 11px; }
+tr.rec td { color: var(--mint); font-weight: 700; }
+.note { font-size: 11px; color: var(--dim); margin-top: 10px; }
+#chaosBtn { width: 100%; margin-top: 12px; background: linear-gradient(135deg, #be185d, #7c3aed); border: 0; }
+#chaosOut { font-size: 12px; margin-top: 8px; }
+#chaosOut div { display: flex; justify-content: space-between; padding: 4px 8px; border-radius: 6px; margin-bottom: 3px; background: rgba(255, 255, 255, .03); }
+#chaosOut div.hit { background: #be185d44; outline: 1px solid var(--pink); }
+
+/* node card */
+#card { position: absolute; left: 32px; top: 50%; width: 270px; transform: translateY(-10%); background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 14px 16px; backdrop-filter: blur(10px); display: none; }
+#card.show { display: block; animation: fadein .3s; }
+#card h3 { margin: 0 0 2px; font-size: 16px; } #card .k { font-size: 12px; color: var(--muted); }
+#card dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 10px 0 0; font-size: 12.5px; }
+#card dt { color: var(--dim); } #card dd { margin: 0; text-align: right; font-weight: 600; }
+#card .x { position: absolute; right: 10px; top: 8px; background: none; border: 0; color: var(--muted); font-size: 18px; }
+.meter { height: 5px; border-radius: 3px; background: #ffffff14; margin-top: 3px; overflow: hidden; } .meter i { display: block; height: 100%; }
+.scrollhint { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); color: var(--dim); font-size: 12px; animation: bob 2s infinite; }
+@keyframes bob { 50% { transform: translate(-50%, 6px); } }
+
+/* sections */
+section { max-width: 1180px; margin: 0 auto; padding: 90px 24px 10px; }
+section h2 { font-size: 34px; margin: 6px 0 8px; font-weight: 800; letter-spacing: -.5px; }
+section > p.lead { color: var(--muted); max-width: 720px; margin: 0 0 34px; }
+.reveal { opacity: 0; transform: translateY(26px); transition: .8s cubic-bezier(.2, .9, .3, 1); }
+.reveal.in { opacity: 1; transform: none; }
+.stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+.stat { background: linear-gradient(180deg, #0e1438, #0a0f28); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 12px; text-align: center; position: relative; overflow: hidden; }
+.stat::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--c); }
+.stat b { font-size: 32px; font-weight: 800; color: var(--c); display: block; }
+.stat span { color: var(--muted); font-size: 12.5px; }
+
+.pipe { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; position: relative; }
+.pipe::before { content: ""; position: absolute; left: 6%; right: 6%; top: 38px; height: 3px;
+  background: linear-gradient(90deg, var(--bad), #60a5fa, var(--gold), var(--pink), var(--mint), #2dd4bf); opacity: .6; }
+.step { text-align: center; position: relative; }
+.step .orb { width: 76px; height: 76px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center; font-size: 30px;
+  background: #0e1433; border: 2px solid var(--c); box-shadow: 0 0 0 0 var(--c); animation: pulse 6s infinite; animation-delay: var(--d); }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 8% { box-shadow: 0 0 34px 4px var(--c); } 20% { box-shadow: 0 0 0 0 transparent; } }
+.step b { display: block; } .step span { color: var(--muted); font-size: 12.5px; }
+
+.three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; perspective: 900px; }
+.tilt { background: linear-gradient(160deg, #121a48, #0a0f28 70%); border: 1px solid var(--line); border-radius: 20px; padding: 24px;
+  transform-style: preserve-3d; transition: transform .15s ease-out, border-color .3s; position: relative; }
+.tilt:hover { border-color: var(--c, var(--accent)); }
+.tilt .ic { font-size: 30px; transform: translateZ(40px); display: inline-block; }
+.tilt h3 { margin: 10px 0 8px; font-size: 19px; transform: translateZ(30px); }
+.tilt p { color: var(--muted); margin: 0; font-size: 14px; transform: translateZ(20px); }
+.tilt code { color: var(--pink); font-size: 12px; }
+.feats { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; perspective: 900px; }
+.feats .tilt { padding: 18px; } .feats .tilt h3 { font-size: 16px; margin: 6px 0 4px; } .feats .tilt p { font-size: 13px; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.filters button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 5px 14px; font-size: 13px; color: var(--muted); }
+.filters button.on { background: #4f5ff0; color: #fff; border-color: #8ea0ff; }
+
+.gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.shot { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #0a0f28; cursor: zoom-in; transition: .3s; }
+.shot:hover { transform: translateY(-4px) scale(1.01); border-color: var(--accent); box-shadow: 0 18px 40px #0008; }
+.shot img { width: 100%; display: block; aspect-ratio: 16/10; object-fit: cover; object-position: top; }
+.shot div { padding: 10px 12px; font-size: 13px; } .shot div b { display: block; }
+.shot div span { color: var(--muted); font-size: 12px; }
+#lightbox { position: fixed; inset: 0; background: #000d; z-index: 99; display: none; place-items: center; padding: 30px; cursor: zoom-out; }
+#lightbox.show { display: grid; } #lightbox img { max-width: 100%; max-height: 90vh; border-radius: 12px; }
+
+.arch { perspective: 1400px; display: grid; place-items: center; padding: 40px 0 220px; }
+.stack { transform: rotateX(56deg) rotateZ(-34deg); transform-style: preserve-3d; transition: transform 1s; width: min(720px, 90vw); }
+.arch:hover .stack { transform: rotateX(48deg) rotateZ(-28deg); }
+.layer { transform-style: preserve-3d; position: relative; margin: 0 0 -10px; padding: 18px 20px 20px; border-radius: 18px;
+  background: color-mix(in srgb, var(--c) 18%, #0a0f28); border: 1.5px solid color-mix(in srgb, var(--c) 70%, transparent);
+  box-shadow: 0 30px 50px #0009; transition: transform .6s cubic-bezier(.2, .9, .3, 1.2); }
+.layer:nth-child(1) { transform: translateZ(0); } .layer:nth-child(2) { transform: translateZ(-60px); }
+.layer:nth-child(3) { transform: translateZ(-120px); } .layer:nth-child(4) { transform: translateZ(-180px); }
+.arch:hover .layer:nth-child(1) { transform: translateZ(60px); } .arch:hover .layer:nth-child(2) { transform: translateZ(-20px); }
+.arch:hover .layer:nth-child(3) { transform: translateZ(-100px); } .arch:hover .layer:nth-child(4) { transform: translateZ(-180px); }
+.layer h3 { margin: 0 0 10px; font-size: 15px; color: color-mix(in srgb, var(--c) 60%, #fff); letter-spacing: 1px; }
+.layer .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.layer .chips span { font-size: 12px; padding: 4px 10px; border-radius: 8px; background: #0008; border: 1px solid #ffffff1a; }
+.archflat { display: none; }
+
+.tabs { display: flex; gap: 6px; margin-bottom: -1px; }
+.tabs button { padding: 8px 16px; border: 1px solid var(--line); border-bottom: 0; border-radius: 10px 10px 0 0; background: transparent; color: var(--muted); }
+.tabs button.on { background: #0b1030; color: var(--text); }
+.term { background: #0b1030; border: 1px solid var(--line); border-radius: 0 12px 12px 12px; position: relative; }
+.term .bar { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.term .bar i { width: 10px; height: 10px; border-radius: 50%; background: #ff5f57; } .term .bar i:nth-child(2) { background: #febc2e; } .term .bar i:nth-child(3) { background: #28c840; }
+.term pre { margin: 0; padding: 16px 18px; overflow-x: auto; font-size: 13px; line-height: 1.75; color: #d6dcff; }
+.term pre .c { color: #5d6799; } .term pre .p { color: var(--mint); }
+.copy { position: absolute; right: 12px; top: 6px; font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: #ffffff0a; }
+.urls { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+.api-search { width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: #0b1030; color: var(--text); font: inherit; margin-bottom: 12px; }
+.api { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.api .row { display: grid; grid-template-columns: 92px 280px 1fr; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); align-items: center; font-size: 13px; }
+.api .row:last-child { border-bottom: 0; } .api .row:hover { background: #ffffff06; }
+.m { font: 700 11px "JetBrains Mono", monospace; padding: 3px 8px; border-radius: 6px; text-align: center; }
+.m.GET { background: #0d948833; color: #5eead4; } .m.POST { background: #4f5ff033; color: #a5b4fc; } .m.PUT { background: #f59e0b33; color: #fcd34d; } .m.DEL { background: #ef444433; color: #fca5a5; }
+.api .row code { color: #e0e7ff; font-size: 12.5px; } .api .row span { color: var(--muted); }
+
+.stackgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.stackgrid > div { border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: #0a0f28; }
+.stackgrid h3 { margin: 0 0 10px; font-size: 14px; color: var(--accent); }
+.stackgrid span { display: inline-block; font-size: 12px; padding: 3px 9px; border-radius: 6px; background: #ffffff0a; border: 1px solid #ffffff12; margin: 0 4px 6px 0; }
+details { border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-bottom: 8px; background: #0a0f28; }
+details summary { cursor: pointer; font-weight: 600; } details p { color: var(--muted); margin: 8px 0 0; font-size: 14px; }
+footer { text-align: center; color: var(--dim); padding: 70px 20px 50px; font-size: 13px; }
+
+@media (max-width: 1000px) {
+  #hero { height: auto; min-height: 0; }
+  #scene { position: relative; height: 62vh; }
+  .intro { position: relative; left: 0; top: 0; max-width: none; padding: 80px 16px 0; }
+  .intro h1 { font-size: 34px; }
+  #panel { position: relative; inset: auto; width: auto; margin: 12px 16px; max-height: none; }
+  .legend, .cams { position: relative; left: 0; bottom: 0; transform: none; padding: 8px 16px; }
+  #card { left: 16px; right: 16px; width: auto; top: 140px; transform: none; }
+  .scrollhint { display: none; }
+  nav .links a:not(.gh) { display: none; }
+  .stats { grid-template-columns: repeat(3, 1fr); }
+  .pipe { grid-template-columns: repeat(3, 1fr); row-gap: 26px; } .pipe::before { display: none; }
+  .three, .gallery, .stackgrid { grid-template-columns: 1fr; }
+  .api .row { grid-template-columns: 70px 1fr; } .api .row span { grid-column: 1 / -1; }
+  section { padding: 60px 16px 10px; } section h2 { font-size: 27px; }
+}
+@media (max-width: 560px) { .arch { padding: 10px 0 20px; } .stats { grid-template-columns: repeat(2, 1fr); } .pipe { grid-template-columns: repeat(2, 1fr); } .stack { transform: none !important; } .layer { transform: none !important; margin-bottom: 10px; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo"><i></i>AEGIS</div>
+  <div class="links">
+    <a href="#how">How it works</a><a href="#features">Features</a><a href="#screens">Screens</a>
+    <a href="#arch">Architecture</a><a href="#run">Run it</a><a href="#api">API</a>
+    <a class="gh" href="https://github.com/sharwaripatil15-dev/Supply-Chain-Digital-Twin">★ GitHub</a>
+  </div>
+</nav>
+
+<div id="hero">
+  <div id="scene"></div>
+  <div class="intro">
+    <div class="kicker">AI SUPPLY CHAIN DIGITAL TWIN</div>
+    <h1>See the disruption coming.</h1>
+    <p>Find the failure nobody tested for. Pick a fix that doesn't break something else. Suppliers → factories → warehouses → customers, live on a 3D map of India.</p>
+    <div class="cta">
+      <button class="btn primary" id="playCta">▶ Play a disruption</button>
+      <a class="btn" href="#how">How it works ↓</a>
+    </div>
+  </div>
+  <div id="card"><button class="x" aria-label="Close">×</button><div id="cardBody"></div></div>
+  <div class="legend" id="legend"></div>
+  <div class="cams">
+    <button class="btn" data-cam="india">India</button>
+    <button class="btn" data-cam="south">South cluster</button>
+    <button class="btn" data-cam="top">Top down</button>
+    <button class="btn" id="spin">⟳ Auto-rotate</button>
+  </div>
+  <div class="scrollhint">scroll for the full README ↓</div>
+
+  <aside id="panel">
+    <header>
+      <div class="live"><i></i>SCENARIO PLAYER · REAL ENGINE OUTPUT</div>
+      <div class="scen" id="scenBtns"></div>
+    </header>
+    <div class="body">
+      <div id="scenTitle"></div>
+      <div class="kpis">
+        <div class="kpi"><b>SURVIVAL CLOCK</b><span id="kClock" style="color:var(--gold)">–</span><small id="kClockN"></small></div>
+        <div class="kpi"><b>UNMET SO FAR</b><span id="kUnmet" style="color:#f87171">–</span><small id="kUnmetN"></small></div>
+        <div class="kpi"><b>REVENUE AT RISK</b><span id="kRev" style="color:var(--pink)">–</span><small>whole horizon</small></div>
+        <div class="kpi"><b>SITES HIT TODAY</b><span id="kHit" style="color:var(--warn)">–</span><small id="kHitN"></small></div>
+      </div>
+      <div class="player">
+        <button id="play" aria-label="Play">▶</button>
+        <input type="range" id="day" min="0" max="13" value="0" aria-label="Day" />
+        <span class="day" id="dayLbl">Day 0</span>
+      </div>
+      <div id="bars"></div>
+      <h4>EVENT LOG</h4>
+      <ul id="log"></ul>
+      <h4>RECOVERY OPTIMISER · EVERY PLAN COMPARED</h4>
+      <table><thead><tr><th>Plan</th><th>Cost</th><th>Unmet</th><th>Safe</th></tr></thead><tbody id="strat"></tbody></table>
+      <button class="btn" id="chaosBtn">🔍 Run Chaos Finder (every site, every pair)</button>
+      <div id="chaosOut"></div>
+      <div class="note">Numbers come from <code>core/sim.py</code>, <code>core/strategies.py</code> and <code>core/chaos.py</code> run on <code>backend/mock/sample_*.csv</code> (see <code>docs/twin-data.js</code>). Everything is simulated, not real-world data.</div>
+    </div>
+  </aside>
+</div>
+
+<section class="reveal">
+  <div class="stats" id="stats"></div>
+</section>
+
+<section id="how" class="reveal">
+  <div class="kicker">HOW IT WORKS</div>
+  <h2>From "something broke" to "here is the safe fix"</h2>
+  <p class="lead">Throw a disruption at the twin (a plant fire, a flooded port, a festival demand spike) and watch the ripple travel day by day. AEGIS then finds the weak spots on its own, recommends a recovery plan with the trade-offs laid out, and tells you where a new warehouse or plant would pay off.</p>
+  <div class="pipe" id="pipe"></div>
+</section>
+
+<section class="reveal">
+  <div class="kicker">THREE THINGS NOBODY ELSE SHOWS YOU</div>
+  <h2>The parts that make it different</h2>
+  <p class="lead">Move your cursor over a card.</p>
+  <div class="three">
+    <div class="tilt" style="--c:var(--pink)"><span class="ic">🔍</span><h3>Chaos Finder</h3><p>A reverse stress test. AEGIS knocks out every node and <b>every pair</b> and ranks the damage, surfacing <i>hidden pairs</i>: two sites that each look safe alone but together cut off a region.<br /><br /><code>synergy = unmet(a+b) − unmet(a) − unmet(b)</code></p></div>
+    <div class="tilt" style="--c:var(--gold)"><span class="ic">⏱️</span><h3>Survival Clock</h3><p>One number a COO understands: <b>days until the first customer runs out of stock</b>. Under it: revenue at risk, plus P50/P90 from a Monte Carlo over uncertain outage durations.</p></div>
+    <div class="tilt" style="--c:var(--mint)"><span class="ic">🛡️</span><h3>Fix-safety check</h3><p>The cheapest fix is often a trap: draining safety stock fixes today and creates tomorrow's single point of failure. Every plan is re-stress-tested <i>after</i> it is applied; the recommendation is the cheapest <b>safe</b> plan.</p></div>
+  </div>
+</section>
+
+<section id="features" class="reveal">
+  <div class="kicker">FEATURE TOUR</div>
+  <h2>Fourteen tools, one twin</h2>
+  <p class="lead">Filter by what you care about.</p>
+  <div class="filters" id="filters"></div>
+  <div class="feats" id="feats"></div>
+</section>
+
+<section id="screens" class="reveal">
+  <div class="kicker">SCREENSHOTS</div>
+  <h2>What it looks like</h2>
+  <p class="lead">Click any screen to enlarge it.</p>
+  <div class="gallery" id="gallery"></div>
+</section>
+
+<section id="arch" class="reveal">
+  <div class="kicker">ARCHITECTURE</div>
+  <h2>Four layers, hover to pull them apart</h2>
+  <p class="lead">The UI and the browser extension talk to FastAPI; routers call one core engine; Claude only ever re-words engine evidence.</p>
+  <div class="arch"><div class="stack" id="stack"></div></div>
+</section>
+
+<section id="run" class="reveal">
+  <div class="kicker">RUN IT</div>
+  <h2>Up in two commands</h2>
+  <p class="lead">Docker runs everything. Local setup needs Python 3.11+ and Node 20+.</p>
+  <div class="tabs"><button class="on" data-t="docker">🐳 Docker</button><button data-t="local">💻 Local</button></div>
+  <div class="term"><div class="bar"><i></i><i></i><i></i></div><button class="copy">Copy</button><pre id="cmd"></pre></div>
+  <div class="urls">
+    <span class="chip">🖥️ UI · localhost:5173</span><span class="chip">⚡ API + Swagger · localhost:8000/docs</span><span class="chip">🧱 Redis · localhost:6379</span>
+  </div>
+</section>
+
+<section id="api" class="reveal">
+  <div class="kicker">API CONTRACT</div>
+  <h2>Endpoints</h2>
+  <p class="lead">All schemas live in <code>backend/schemas.py</code>. Type to filter.</p>
+  <input class="api-search" id="apiq" placeholder="Search endpoints, e.g. chaos, expansion, POST…" />
+  <div class="api" id="apilist"></div>
+</section>
+
+<section class="reveal">
+  <div class="kicker">TECH STACK</div>
+  <h2>Built with</h2>
+  <div class="stackgrid" id="tech"></div>
+</section>
+
+<section class="reveal">
+  <div class="kicker">LIMITATIONS (HONEST)</div>
+  <h2>What it is not (yet)</h2>
+  <div id="limits"></div>
+</section>
+
+<footer>
+  AEGIS · built for the problem in <a href="https://www.imf.org/en/publications/wp/issues/2022/02/15/supply-bottlenecks-where-why-how-much-and-what-next-513188">Supply bottlenecks: where, why, how much, and what next (IMF)</a><br />
+  Every figure on this page is simulated by the AEGIS engine. · <a href="https://github.com/sharwaripatil15-dev/Supply-Chain-Digital-Twin#readme">Full text README</a>
+</footer>
+<div id="lightbox"><img alt="" /></div>
+
+<script src="twin-data.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+
+const D = window.AEGIS_DATA;
+const $ = (s, r = document) => r.querySelector(s);
+const inr = v => v >= 1e7 ? `₹${(v / 1e7).toFixed(2)} cr` : v >= 1e5 ? `₹${(v / 1e5).toFixed(1)} lakh` : `₹${Math.round(v).toLocaleString("en-IN")}`;
+const num = v => Math.round(v).toLocaleString("en-IN");
+
+const TYPES = {
+  supplier: { label: "Supplier", color: 0x8b5cf6, css: "#8b5cf6", seg: 3, r: .75 },
+  factory: { label: "Factory", color: 0x2563eb, css: "#2563eb", seg: 4, r: .85 },
+  warehouse: { label: "Warehouse", color: 0x0d9488, css: "#0d9488", seg: 6, r: 1 },
+  customer: { label: "Customer", color: 0x94a3b8, css: "#94a3b8", seg: 24, r: .6 },
+};
+const STATUS = { ok: 0x22c55e, stressed: 0xf59e0b, down: 0xef4444 };
+const K = 1.15;
+const toXZ = (lon, lat) => new THREE.Vector3((lon - 80) * K, 0, -(lat - 22) * K);
+
+/* ---------- scene ---------- */
+const host = $("#scene");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+host.appendChild(renderer.domElement);
+const labels = new CSS2DRenderer();
+labels.domElement.style.cssText = "position:absolute;inset:0;pointer-events:none";
+host.appendChild(labels.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070f);
+scene.fog = new THREE.FogExp2(0x05070f, 0.018);
+const camera = new THREE.PerspectiveCamera(42, 1, .1, 400);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = 1.35; controls.minDistance = 8; controls.maxDistance = 90;
+
+scene.add(new THREE.HemisphereLight(0xc7d0ff, 0x1a2050, 2.2));
+scene.add(new THREE.AmbientLight(0x404a90, 1.2));
+const sun = new THREE.DirectionalLight(0xffffff, 2.4); sun.position.set(-20, 40, 25); scene.add(sun);
+const rim = new THREE.PointLight(0x8b5cf6, 60, 80); rim.position.set(12, 10, -14); scene.add(rim);
+
+// stars
+{
+  const g = new THREE.BufferGeometry(), p = [];
+  for (let i = 0; i < 1600; i++) { const r = 80 + Math.random() * 120, t = Math.random() * Math.PI * 2, f = Math.random() * Math.PI * .5; p.push(r * Math.cos(t) * Math.sin(f), r * Math.cos(f) * .6 + 5, r * Math.sin(t) * Math.sin(f)); }
+  g.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x8ea0ff, size: .35, transparent: true, opacity: .7, fog: false })));
+}
+const grid = new THREE.GridHelper(120, 80, 0x2a3580, 0x141b45); grid.position.y = -.62; grid.material.transparent = true; grid.material.opacity = .45; scene.add(grid);
+
+// India slab (stylised outline)
+const INDIA = [[68.1,23.6],[69.5,24.3],[71,24.4],[70.6,25.7],[70,26.6],[71,27.8],[72.4,28.9],[73.4,29.9],[74.5,31],[74.6,32.5],[74,33.5],[74.3,34.7],[76,35.4],[77.8,35.4],[78.9,34.3],[78.7,32.6],[79,31.3],[80.3,30.5],[81.1,30],[82,28.8],[83.3,27.4],[84.6,27.3],[86,26.6],[88.1,26.5],[88.8,27.3],[89.8,26.7],[92,26.9],[93.8,27.6],[95.4,28.3],[97.3,28.2],[96,27],[95.1,26],[94.6,25.2],[94.1,23.9],[93.3,24],[92.6,22],[92.2,23.6],[91.4,24.1],[90.2,25.2],[89,25.2],[88.7,24.3],[88.9,22],[88,21.6],[86.9,21.4],[85.1,19.5],[84,18.3],[82.3,16.6],[80.3,15.6],[80.2,13.4],[79.9,10.3],[78.9,9],[77.5,8.1],[76.5,8.9],[75.8,11.3],[74.8,12.9],[74.1,14.8],[73.5,16],[72.9,18.9],[72.6,21.1],[72.5,22.4],[70,20.8],[69,22.3]];
+{
+  const shape = new THREE.Shape(INDIA.map(([lo, la]) => new THREE.Vector2((lo - 80) * K, (la - 22) * K)));
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: .6, bevelEnabled: true, bevelThickness: .08, bevelSize: .08, bevelSegments: 2 });
+  geo.rotateX(-Math.PI / 2); geo.translate(0, -.6, 0);
+  const land = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x24307a, roughness: .6, metalness: .15, emissive: 0x111a5c, emissiveIntensity: .8 }));
+  scene.add(land);
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), new THREE.LineBasicMaterial({ color: 0x6b7cff, transparent: true, opacity: .9 }));
+  scene.add(edge);
+}
+
+/* ---------- nodes ---------- */
+const nodeObjs = {}; const pickables = [];
+for (const n of D.nodes) {
+  const T = TYPES[n.kind]; const pos = toXZ(+n.lon, +n.lat);
+  const h = 1 + (+n.stock / 2200) * 4.6 + (n.kind === "factory" ? .8 : 0);
+  const group = new THREE.Group(); group.position.copy(pos); scene.add(group);
+  const mat = new THREE.MeshStandardMaterial({ color: T.color, roughness: .35, metalness: .25, emissive: T.color, emissiveIntensity: .45, transparent: true });
+  const geo = new THREE.CylinderGeometry(T.r, T.r, h, T.seg, 1); geo.translate(0, h / 2, 0);
+  if (T.seg === 4) geo.rotateY(Math.PI / 4);
+  const mesh = new THREE.Mesh(geo, mat); mesh.userData.id = n.id; group.add(mesh); pickables.push(mesh);
+  if (n.kind === "factory") {
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(.16, .2, 1, 10), mat); st.position.set(.25, h + .5, -.25); group.add(st);
+  }
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(T.r * 1.001, T.r * 1.001, .06, T.seg), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55 }));
+  if (T.seg === 4) cap.rotation.y = Math.PI / 4; cap.position.y = h; group.add(cap);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(T.r + .25, T.r + .42, 48), new THREE.MeshBasicMaterial({ color: STATUS.ok, transparent: true, opacity: .8, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = .02; group.add(ring);
+  const ripple = new THREE.Mesh(new THREE.RingGeometry(.9, 1, 64), new THREE.MeshBasicMaterial({ color: STATUS.down, transparent: true, opacity: 0, side: THREE.DoubleSide }));
+  ripple.rotation.x = -Math.PI / 2; ripple.position.y = .03; group.add(ripple);
+  const div = document.createElement("div"); div.className = "label3d"; div.textContent = `${n.id} · ${n.city}`;
+  const lab = new CSS2DObject(div); lab.position.set(0, h + (n.kind === "factory" ? 1.5 : .6), 0); group.add(lab);
+  nodeObjs[n.id] = { n, group, mesh, mat, ring, ripple, div, h, top: pos.clone().setY(h), status: "ok", visible: true };
+}
+
+/* ---------- lanes ---------- */
+const lanes = [];
+for (const e of D.edges) {
+  const a = nodeObjs[e.source], b = nodeObjs[e.target];
+  const p0 = a.top.clone(), p2 = b.top.clone(); const d = p0.distanceTo(p2);
+  const p1 = p0.clone().add(p2).multiplyScalar(.5); p1.y = Math.max(p0.y, p2.y) + d * .32 + .6;
+  const curve = new THREE.QuadraticBezierCurve3(p0, p1, p2);
+  const col = TYPES[a.n.kind].color;
+  const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, .05, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(col).lerp(new THREE.Color(0xffffff), .25), transparent: true, opacity: .85 }));
+  scene.add(tube);
+  const dashed = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(64)), new THREE.LineDashedMaterial({ color: 0xef4444, dashSize: .35, gapSize: .25, transparent: true }));
+  dashed.computeLineDistances(); dashed.visible = false; scene.add(dashed);
+  const parts = [];
+  for (let i = 0; i < 3; i++) {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(.12, 10, 10), new THREE.MeshBasicMaterial({ color: 0xe0e7ff }));
+    s.userData.t = i / 3; scene.add(s); parts.push(s);
+  }
+  lanes.push({ e, a, b, curve, tube, dashed, parts, speed: 1 / (2 + +e.lead * 1.6), cut: false });
+}
+// chaos pair arc
+const pairArc = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xf472b6, transparent: true, opacity: .95 }));
+scene.add(pairArc);
+
+/* ---------- post ---------- */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .75, .5, .2); composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+function resize() {
+  const w = host.clientWidth, h = host.clientHeight;
+  renderer.setSize(w, h); labels.setSize(w, h); composer.setSize(w, h); bloom.setSize(w, h);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize();
+
+/* ---------- camera presets ---------- */
+const CAMS = {
+  india: { pos: [-5, 23, 25], target: [3, 0, 0] },
+  south: { pos: [-4, 11, 15], target: [-1, 0, 8] },
+  top: { pos: [2, 46, .1], target: [2, 0, 0] },
+};
+let camTween = null;
+function flyTo(name) {
+  const c = CAMS[name]; camTween = { t: 0, fp: camera.position.clone(), ft: controls.target.clone(), tp: new THREE.Vector3(...c.pos), tt: new THREE.Vector3(...c.target) };
+}
+const wide = innerWidth > 1000;
+camera.position.set(-2, 55, 60); controls.target.set(wide ? 6 : 2, 0, 0);
+CAMS.india.target[0] = wide ? 6 : 2;
+flyTo("india");
+document.querySelectorAll("[data-cam]").forEach(b => b.onclick = () => flyTo(b.dataset.cam));
+$("#spin").onclick = () => { controls.autoRotate = !controls.autoRotate; $("#spin").classList.toggle("primary", controls.autoRotate); };
+controls.autoRotateSpeed = .6;
+
+/* ---------- legend ---------- */
+for (const [k, T] of Object.entries(TYPES)) {
+  const c = document.createElement("button"); c.className = "chip"; c.innerHTML = `<i class="sw" style="background:${T.css}"></i>${T.label}`;
+  c.onclick = () => {
+    c.classList.toggle("off"); const vis = !c.classList.contains("off");
+    for (const o of Object.values(nodeObjs)) if (o.n.kind === k) { o.group.visible = vis; o.visible = vis; }
+    for (const l of lanes) { const v = l.a.visible && l.b.visible; l.tube.visible = v && !l.cut; l.dashed.visible = v && l.cut; l.parts.forEach(p => p.visible = v && !l.cut); }
+  };
+  $("#legend").appendChild(c);
+}
+$("#legend").insertAdjacentHTML("beforeend", `<span class="chip"><i class="sw" style="background:var(--ok)"></i>ok</span><span class="chip"><i class="sw" style="background:var(--warn)"></i>stressed</span><span class="chip"><i class="sw" style="background:var(--bad)"></i>down</span>`);
+
+/* ---------- picking ---------- */
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2(); let hover = null;
+function pick(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObjects(pickables.filter(m => nodeObjs[m.userData.id].visible))[0];
+  return hit ? nodeObjs[hit.object.userData.id] : null;
+}
+renderer.domElement.addEventListener("pointermove", ev => { hover = pick(ev); renderer.domElement.style.cursor = hover ? "pointer" : "grab"; });
+let downAt = null;
+renderer.domElement.addEventListener("pointerdown", ev => downAt = [ev.clientX, ev.clientY]);
+renderer.domElement.addEventListener("pointerup", ev => {
+  if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 5) return;
+  const o = pick(ev); if (o) showCard(o);
+});
+$("#card .x").onclick = () => $("#card").classList.remove("show");
+function meter(v, col) { return `<div class="meter"><i style="width:${Math.round(v * 100)}%;background:${col}"></i></div>`; }
+function showCard(o) {
+  const n = o.n, T = TYPES[n.kind];
+  const st = o.status; const stc = { ok: "var(--ok)", stressed: "var(--warn)", down: "var(--bad)" }[st];
+  const inL = D.edges.filter(e => e.target === n.id).map(e => e.source), outL = D.edges.filter(e => e.source === n.id).map(e => e.target);
+  $("#cardBody").innerHTML = `<h3>${n.name}</h3><div class="k"><span style="color:${T.css}">■</span> ${T.label} · ${n.city} · <b style="color:${stc}">${st}</b> on day ${state.day}${n.backup === "True" ? " · backup" : ""}</div>
+  <dl><dt>Capacity</dt><dd>${num(+n.capacity)} /day</dd><dt>Stock</dt><dd>${num(+n.stock)} units</dd>${+n.demand ? `<dt>Demand</dt><dd>${num(+n.demand)} /day</dd>` : ""}
+  <dt>Reliability</dt><dd>${(+n.reliability).toFixed(3)}${meter(+n.reliability, "var(--ok)")}</dd>
+  <dt>Utilisation</dt><dd>${Math.round(+n.utilization * 100)}%${meter(+n.utilization, "var(--accent)")}</dd>
+  <dt>ML risk</dt><dd>${(+n.risk).toFixed(2)}${meter(+n.risk, +n.risk > .5 ? "var(--bad)" : "var(--warn)")}</dd>
+  <dt>From</dt><dd>${inL.join(", ") || "–"}</dd><dt>To</dt><dd>${outL.join(", ") || "–"}</dd></dl>`;
+  $("#card").classList.add("show");
+}
+
+/* ---------- scenario player ---------- */
+const state = { s: D.scenarios[0], day: 0, playing: false, acc: 0, chaos: null };
+D.scenarios.forEach((s, i) => {
+  const b = document.createElement("button"); b.textContent = { f1: "🏭 F1 shuts", w3: "🌊 W3 flood", pair: "💥 F1 + F2", spike: "🎉 Festival spike", s2: "⚙️ S2 fails" }[s.id] || s.id;
+  b.onclick = () => selectScenario(i); $("#scenBtns").appendChild(b);
+});
+const barsEl = $("#bars");
+function selectScenario(i) {
+  state.s = D.scenarios[i]; state.day = 0;
+  [...$("#scenBtns").children].forEach((b, j) => b.classList.toggle("on", j === i));
+  $("#scenTitle").textContent = state.s.title;
+  const max = Math.max(1, ...state.s.timeline.map(t => t.unmet));
+  barsEl.innerHTML = state.s.timeline.map(t => `<div title="Day ${t.day}: ${num(t.unmet)} unmet" class="${t.unmet > 0 ? "bad" : ""}" style="height:${4 + t.unmet / max * 48}px"></div>`).join("");
+  [...barsEl.children].forEach((b, d) => b.onclick = () => setDay(d));
+  $("#kRev").textContent = inr(state.s.revenue_at_risk);
+  const so = Object.entries(state.s.stockout_day);
+  $("#kClock").textContent = state.s.survival_clock_days >= 14 ? "14+ days" : `${state.s.survival_clock_days} days`;
+  $("#kClockN").textContent = so.length ? `${so.map(([c, d]) => `${c} day ${d}`).join(", ")}` : "no customer runs out";
+  $("#strat").innerHTML = state.s.strategies.map(p => `<tr class="${p.recommended ? "rec" : ""}"><td>${p.recommended ? "★ " : ""}${p.name}</td><td>${inr(p.cost)}</td><td>${num(p.unmet)}</td><td>${p.safe ? "✓" : "✗"}</td></tr>`).join("");
+  $("#day").max = state.s.timeline.length - 1;
+  setDay(0);
+}
+function setDay(d) {
+  state.day = d; $("#day").value = d; $("#dayLbl").textContent = `Day ${d}`;
+  const tl = state.s.timeline[d]; const status = tl.status;
+  [...barsEl.children].forEach((b, i) => b.classList.toggle("cur", i === d));
+  let hit = 0;
+  for (const [id, o] of Object.entries(nodeObjs)) {
+    const st = status[id] || "ok"; if (st !== "ok") hit++;
+    if (st === "down" && o.status !== "down") o.ripple.userData.t = 0;
+    o.status = st;
+    o.ring.material.color.setHex(STATUS[st]); o.ring.material.opacity = st === "ok" ? .55 : 1;
+    o.mat.opacity = st === "down" ? .35 : 1;
+    o.mat.emissiveIntensity = st === "down" ? .05 : st === "stressed" ? .7 : .45;
+    o.div.className = "label3d " + (st === "ok" ? "" : st);
+  }
+  for (const l of lanes) {
+    const cut = status[l.a.n.id] === "down" || status[l.b.n.id] === "down";
+    l.cut = cut; const v = l.a.visible && l.b.visible;
+    l.tube.visible = v && !cut; l.dashed.visible = v && cut; l.parts.forEach(p => p.visible = v && !cut);
+  }
+  const cum = state.s.timeline.slice(0, d + 1).reduce((a, t) => a + t.unmet, 0);
+  $("#kUnmet").textContent = num(cum); $("#kUnmetN").textContent = `of ${num(state.s.total_unmet)} units total`;
+  $("#kHit").textContent = `${hit} / 16`;
+  const downs = Object.entries(status).filter(([, v]) => v === "down").map(([k]) => k);
+  $("#kHitN").textContent = downs.length ? `down: ${downs.join(", ")}` : "none down";
+  const lines = state.s.log.filter(l => { const m = /^Day (\d+)/.exec(l); return m && +m[1] <= d; });
+  $("#log").innerHTML = (lines.length ? lines : ["No events yet."]).map(l => `<li class="${/DOWN|STOCKOUT/.test(l) ? "down" : /stressed/.test(l) ? "stressed" : ""}">${l}</li>`).join("");
+  if ($("#card").classList.contains("show")) { const id = /<h3>(.*?)<\/h3>/.exec($("#cardBody").innerHTML); const o = Object.values(nodeObjs).find(o => id && o.n.name === id[1]); if (o) showCard(o); }
+}
+$("#day").oninput = e => setDay(+e.target.value);
+function togglePlay(force) {
+  state.playing = force ?? !state.playing; $("#play").textContent = state.playing ? "❚❚" : "▶";
+  if (state.playing && state.day >= state.s.timeline.length - 1) setDay(0);
+}
+$("#play").onclick = () => togglePlay();
+$("#playCta").onclick = () => { flyTo("south"); selectScenario(0); togglePlay(true); };
+selectScenario(0);
+// play the headline scenario once on load, unless the visitor has already taken over
+let touched = false; ["pointerdown", "keydown", "wheel"].forEach(ev => addEventListener(ev, () => touched = true, { once: true }));
+setTimeout(() => { if (!touched && !state.chaos) togglePlay(true); }, 2500);
+
+/* ---------- chaos finder ---------- */
+$("#chaosBtn").onclick = () => {
+  togglePlay(false); setDay(0);
+  for (const o of Object.values(nodeObjs)) { o.status = "ok"; o.ring.material.color.setHex(STATUS.ok); o.mat.opacity = 1; o.div.className = "label3d"; }
+  for (const l of lanes) { l.cut = false; l.tube.visible = true; l.dashed.visible = false; l.parts.forEach(p => p.visible = true); }
+  const items = [...D.chaos.spof.map(s => ({ kind: "Single point", t: s.target.split("->"), edge: s.target.includes("->"), label: s.target, v: `${num(s.unmet)} unmet` })),
+    ...D.chaos.hidden_pairs.map(p => ({ kind: "Hidden pair", t: p.pair, pair: true, label: p.pair.join(" + "), v: `+${num(p.synergy)} synergy` }))];
+  $("#chaosOut").innerHTML = `<div><b>Resilience score</b><b style="color:var(--mint)">${D.chaos.resilience_score}</b></div>` + items.map(i => `<div><span>${i.kind}: <b>${i.label}</b></span><span>${i.v}</span></div>`).join("");
+  state.chaos = { items, i: -1, acc: 1.2 };
+  flyTo("india");
+};
+function chaosStep(i) {
+  const rows = [...$("#chaosOut").children].slice(1); rows.forEach((r, j) => r.classList.toggle("hit", j === i));
+  for (const o of Object.values(nodeObjs)) { o.ring.material.color.setHex(STATUS.ok); o.mat.emissiveIntensity = .45; }
+  for (const l of lanes) l.tube.material.color.set(new THREE.Color(TYPES[l.a.n.kind].color).lerp(new THREE.Color(0xffffff), .25));
+  pairArc.visible = false;
+  const it = state.chaos.items[i]; if (!it) return;
+  const ids = it.t.flatMap(t => t.split("->"));
+  if (it.edge) { const l = lanes.find(l => l.e.source === it.t[0] && l.e.target === it.t[1]); if (l) l.tube.material.color.setHex(0xf472b6); }
+  else ids.forEach(id => { const o = nodeObjs[id]; if (o) { o.ring.material.color.setHex(it.pair ? 0xf472b6 : STATUS.down); o.mat.emissiveIntensity = 1.2; } });
+  if (it.pair) {
+    const pts = it.t.map(t => t.includes("->") ? (() => { const [s, d] = t.split("->"); return nodeObjs[s].top.clone().lerp(nodeObjs[d].top, .5); })() : nodeObjs[t].top.clone());
+    const mid = pts[0].clone().lerp(pts[1], .5); mid.y += 3 + pts[0].distanceTo(pts[1]) * .4;
+    pairArc.geometry.dispose(); pairArc.geometry = new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(pts[0], mid, pts[1]), 60, .08, 8); pairArc.visible = true;
+  }
+}
+
+/* ---------- loop ---------- */
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), .05), t = clock.elapsedTime;
+  if (camTween) {
+    camTween.t = Math.min(1, camTween.t + dt / 1.6); const k = 1 - Math.pow(1 - camTween.t, 3);
+    camera.position.lerpVectors(camTween.fp, camTween.tp, k); controls.target.lerpVectors(camTween.ft, camTween.tt, k);
+    if (camTween.t >= 1) camTween = null;
+  }
+  controls.update();
+  if (state.playing) { state.acc += dt; if (state.acc > 1) { state.acc = 0; if (state.day < state.s.timeline.length - 1) setDay(state.day + 1); else togglePlay(false); } }
+  if (state.chaos) { state.chaos.acc += dt; if (state.chaos.acc > 1.3) { state.chaos.acc = 0; state.chaos.i++; chaosStep(state.chaos.i); if (state.chaos.i >= state.chaos.items.length) state.chaos = null; } }
+  for (const l of lanes) {
+    if (l.cut) { l.dashed.material.opacity = .5 + .5 * Math.sin(t * 6); continue; }
+    for (const p of l.parts) { p.userData.t = (p.userData.t + dt * l.speed) % 1; p.position.copy(l.curve.getPoint(p.userData.t)); }
+  }
+  const camD = camera.position.distanceTo(controls.target);
+  for (const o of Object.values(nodeObjs)) {
+    const r = o.ripple; if (o.status === "down") { r.userData.t = ((r.userData.t ?? 0) + dt * .6) % 1; const s = 1 + r.userData.t * 3; r.scale.set(s, s, s); r.material.opacity = 1 - r.userData.t; } else r.material.opacity = 0;
+    if (o.status === "stressed") o.ring.scale.setScalar(1 + .12 * Math.sin(t * 5));
+    else o.ring.scale.setScalar(1);
+    o.div.style.opacity = (o === hover || o.status !== "ok" || camD < 26) ? 1 : (o.n.kind === "customer" ? 0 : .55);
+    o.div.textContent = o === hover ? o.n.name : `${o.n.id} · ${o.n.city}`;
+  }
+  composer.render(); labels.render(scene, camera);
+});
+
+/* ---------- README sections ---------- */
+const STATS = [["318", "tests passing", "#34d399"], ["24,000", "simulated scenarios", "#a78bfa"], ["8", "insight detectors", "#60a5fa"], ["60", "candidate cities", "#2dd4bf"], ["100×", "Monte Carlo replays", "#fbbf24"], ["< 1 s", "to pre-screen 2,000", "#f472b6"]];
+$("#stats").innerHTML = STATS.map(([v, l, c]) => `<div class="stat" style="--c:${c}"><b data-v="${v}">${v}</b><span>${l}</span></div>`).join("");
+
+const PIPE = [["💥", "Disrupt", "plant fire, flood, festival spike", "#ef4444"], ["📅", "Simulate", "day-by-day min-cost flow, Survival Clock", "#60a5fa"], ["🎲", "Monte Carlo", "P50 / P90 loss, shortage odds", "#fbbf24"], ["🔍", "Chaos Finder", "every site and every pair", "#f472b6"], ["🛟", "Recover", "cheapest safe plan wins", "#34d399"], ["🗺️", "Expand", "Dijkstra + MILP picks new sites", "#2dd4bf"]];
+$("#pipe").innerHTML = PIPE.map(([e, t, d, c], i) => `<div class="step" style="--c:${c};--d:${i}s"><div class="orb">${e}</div><b>${t}</b><span>${d}</span></div>`).join("");
+
+const FEATS = [
+  ["🧭", "Overview", "Health Score with breakdown and trend, five KPIs, 'Fix this' buttons, alerts and a 2-page executive brief.", "exec"],
+  ["🌐", "2D / 3D digital twin", "Cytoscape graph (geo or tier layout) and a deck.gl + MapLibre 3D map with camera presets, risk glow and animated flows.", "twin"],
+  ["💥", "Simulator", "Day-by-day min-cost flow (OR-Tools) with stock buffers, backup activation lag, delays and the Survival Clock.", "engine"],
+  ["🎲", "Monte Carlo", "Replays a disruption 100× with realistic variation: typical loss (P50), bad case (P90), shortage probability.", "engine"],
+  ["🔍", "Chaos Finder", "Knocks out every site and every pair; surfaces hidden pairs. ML pre-screens 2,000 scenarios in under a second.", "engine"],
+  ["🛟", "Recovery optimiser", "LP over reroute, backup supplier, overtime, safety stock, production shift and air expedite, with the fix-safety check.", "engine"],
+  ["🧪", "What-if planner", "Plain English → scenario → impact, cascade, every plan compared, attribution, sensitivity, confidence and follow-up Q&A.", "ai"],
+  ["🩺", "Insights", "8 detectors including LP shadow prices, single points of failure and hidden pairs, each with re-simulated fixes.", "engine"],
+  ["🗺️", "Expansion planner", "Dijkstra transport matrices → facility-location MILP → resilience check; payback, service, CO₂ and Health Score.", "engine"],
+  ["🌧️", "Weather & hazards", "Open-Meteo, flood, marine, USGS quakes and GDACS → lane risk → disruption events and weather-aware re-routing.", "twin"],
+  ["🤖", "ML surrogate", "XGBoost trained on 24,000 simulated scenarios over 400 synthetic networks; conformal 80% intervals; SHAP explanations.", "ai"],
+  ["🏭", "Synthetic networks", "7 archetypes × 6 industries (FMCG, pharma cold-chain, electronics, automotive, apparel, agri); 3 ready-made demos.", "twin"],
+  ["🛡️", "Grounded AI", "Claude may only re-word engine evidence; any number not in the evidence is rejected for a deterministic template.", "ai"],
+  ["🧩", "Browser extension", "Right-click any news headline → Ask AEGIS → simulated impact in a side panel; alert badge on the toolbar.", "exec"],
+];
+const CATS = { all: "All", engine: "⚙️ Engine", ai: "🤖 AI & ML", twin: "🌐 Twin & data", exec: "🧭 For executives" };
+$("#filters").innerHTML = Object.entries(CATS).map(([k, v]) => `<button data-f="${k}" class="${k === "all" ? "on" : ""}">${v}</button>`).join("");
+function renderFeats(f) {
+  $("#feats").innerHTML = FEATS.filter(x => f === "all" || x[3] === f).map(([i, t, d]) => `<div class="tilt"><span class="ic">${i}</span><h3>${t}</h3><p>${d}</p></div>`).join("");
+  bindTilt();
+}
+$("#filters").onclick = e => { const b = e.target.closest("button"); if (!b) return; [...$("#filters").children].forEach(x => x.classList.toggle("on", x === b)); renderFeats(b.dataset.f); };
+
+const SHOTS = [["overview", "Overview", "Health Score, KPIs, top risks and recommended actions"], ["network-3d", "3D twin", "sites as extruded columns, lanes as arcs, on a live map of India"], ["whatif", "What-if planner", "impact, Monte Carlo, ML preview and a grounded brief"], ["insights", "Insights", "ranked pain points, each with a fix tested in the simulator"], ["expansion", "Expansion", "candidate cities as ghosts, numbered picks, proposed lanes dashed"], ["extension", "Browser extension", "right-click a headline → simulated impact"]];
+$("#gallery").innerHTML = SHOTS.map(([f, t, d]) => `<div class="shot" data-src="images/${f}.png"><img src="images/${f}.png" alt="${t}: ${d}" loading="lazy" /><div><b>${t}</b><span>${d}</span></div></div>`).join("");
+$("#gallery").onclick = e => { const s = e.target.closest(".shot"); if (!s) return; $("#lightbox img").src = s.dataset.src; $("#lightbox").classList.add("show"); };
+$("#lightbox").onclick = () => $("#lightbox").classList.remove("show");
+
+const LAYERS = [
+  ["🖥️ CLIENTS", "#60a5fa", ["React 18 + Vite + Tailwind", "Overview · Network · What-if", "Insights · Expansion · Weather · Data", "Cytoscape 2D", "deck.gl + MapLibre 3D", "Browser extension"]],
+  ["⚡ FASTAPI", "#34d399", ["network · simulate · chaos", "recover · whatif · analysis", "expansion · weather · upload", "cache: memory / Redis"]],
+  ["🧠 CORE ENGINE", "#a78bfa", ["sim · montecarlo (OR-Tools)", "optimizer · strategies (PuLP/CBC)", "chaos · bottleneck (HiGHS)", "expansion (Dijkstra + MILP)", "risk_ml (XGBoost + SHAP)", "synth (24k scenarios)"]],
+  ["🌍 EXTERNAL", "#f472b6", ["Claude: narrate only, numbers validated", "Open-Meteo · USGS · GDACS", "CARTO basemaps"]],
+];
+$("#stack").innerHTML = LAYERS.map(([t, c, ch]) => `<div class="layer" style="--c:${c}"><h3>${t}</h3><div class="chips">${ch.map(x => `<span>${x}</span>`).join("")}</div></div>`).join("");
+
+const CMDS = {
+  docker: `<span class="c"># optional: add ANTHROPIC_API_KEY</span>\n<span class="p">$</span> cp .env.example .env\n<span class="p">$</span> docker compose up --build`,
+  local: `<span class="c"># backend (Python 3.11+)</span>\n<span class="p">$</span> cd backend\n<span class="p">$</span> python -m venv .venv\n<span class="p">$</span> .venv/Scripts/activate      <span class="c"># macOS/Linux: source .venv/bin/activate</span>\n<span class="p">$</span> pip install -r requirements.txt\n<span class="p">$</span> pytest                      <span class="c"># smoke tests for every endpoint</span>\n<span class="p">$</span> uvicorn main:app --reload   <span class="c"># http://localhost:8000/docs</span>\n\n<span class="c"># frontend (Node 20+), in another terminal</span>\n<span class="p">$</span> cd frontend\n<span class="p">$</span> npm install\n<span class="p">$</span> npm run dev                 <span class="c"># http://localhost:5173</span>`,
+};
+const setCmd = k => { $("#cmd").innerHTML = CMDS[k]; document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === k)); };
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => setCmd(b.dataset.t)); setCmd("docker");
+$(".copy").onclick = async () => {
+  const txt = $("#cmd").innerText.split("\n").filter(l => l.startsWith("$")).map(l => l.slice(2).replace(/\s+#.*$/, "")).join("\n");
+  try { await navigator.clipboard.writeText(txt); $(".copy").textContent = "Copied ✓"; } catch { $(".copy").textContent = "Select & copy"; }
+  setTimeout(() => $(".copy").textContent = "Copy", 1600);
+};
+
+const API = [
+  ["GET", "/network", "nodes, edges and resilience score"], ["POST", "/simulate", "day-by-day timeline, Survival Clock, revenue at risk, delays, bottlenecks"],
+  ["POST", "/montecarlo", "P50, P90, shortage probability, histogram"], ["GET", "/chaos", "single points of failure, hidden pairs, resilience score"],
+  ["GET", "/chaos/prescreen", "surrogate-ranked failure scenarios re-run on the exact simulator"], ["POST", "/recover", "strategies with safety check, ROI, playbook, alternate suppliers and routes"],
+  ["POST", "/parse", "plain text → disruption events"], ["GET", "/forecast", "14-day demand forecast with P10-P90 band and MAPE"],
+  ["GET", "/surrogate", "ML surrogate accuracy: MAE, R², speed-up, top features"], ["POST", "/whatif/run", "full what-if brief: sections, evidence, plans, confidence"],
+  ["POST", "/whatif/ask", "follow-up question routed to 3 whitelisted engine tools"], ["GET", "/whatif/history", "past runs; /whatif/{id}, /whatif/{id}/brief"],
+  ["POST", "/whatif/compare", "compare 2 to 4 runs side by side"], ["POST", "/analysis/run", "Insights: findings, Health Score before and after fixes"],
+  ["GET", "/analysis/latest", "latest analysis for the current network version"], ["GET", "/analysis/finding/{id}", "one finding with evidence, stress test and fixes"],
+  ["GET", "/expansion/candidates", "candidate cities (POST to add, remove, exclude, auto, reset)"], ["GET", "/expansion/baseline", "today's KPIs from the flow engine"],
+  ["POST", "/expansion/run", "start an expansion run; poll /expansion/results/{id}"], ["POST", "/expansion/apply", "add a plan's sites and lanes as one undoable step"],
+  ["POST", "/upload", "CSV nodes + edges, validated, optional activate"], ["GET", "/health", "status, mock flags, active network source and version"],
+  ["GET", "/network/source", "active source: preset, csv or manual"], ["PUT", "/network/source", "switch the active source"],
+  ["POST", "/network/nodes", "builder: add a node (PUT / DELETE /network/nodes/{id})"], ["POST", "/network/edges", "builder: add a lane (PUT / DELETE /network/edges/{id})"],
+  ["POST", "/network/validate", "errors, warnings, runnable"], ["POST", "/network/reset", "reset the builder to preset or empty"],
+  ["GET", "/network/export", "aegis-network JSON (also /network/export/csv)"], ["POST", "/network/import", "import exported JSON, optional activate"],
+  ["GET", "/network/demos", "3 ready-made demos + generator options"], ["POST", "/network/generate", "synthetic network: archetype, industry, size"],
+];
+function renderApi(q = "") {
+  q = q.toLowerCase();
+  const rows = API.filter(r => r.join(" ").toLowerCase().includes(q));
+  $("#apilist").innerHTML = rows.map(([m, p, d]) => `<div class="row"><span class="m ${m === "DELETE" ? "DEL" : m}">${m}</span><code>${p}</code><span>${d}</span></div>`).join("") || `<div class="row"><span></span><span>No endpoint matches.</span></div>`;
+}
+$("#apiq").oninput = e => renderApi(e.target.value); renderApi();
+
+const TECH = [["Frontend", "React 18,Vite 8,Tailwind CSS,Cytoscape.js,deck.gl 9,MapLibre GL,Recharts,lucide-react,Axios"], ["Backend", "Python 3.11+,FastAPI,Pydantic v2,NetworkX,OR-Tools,PuLP/CBC,SciPy (HiGHS),NumPy,pandas,scikit-learn,XGBoost,SHAP,PyArrow,Redis (optional)"], ["AI & data", "Anthropic Claude (grounded),Open-Meteo,USGS,GDACS,CARTO basemaps"], ["Ops", "Docker Compose,pytest (318 tests),Chrome extension (MV3)"]];
+$("#tech").innerHTML = TECH.map(([t, l]) => `<div><h3>${t}</h3>${l.split(",").map(x => `<span>${x}</span>`).join("")}</div>`).join("");
+
+const LIMITS = [["Synthetic data", "The network, risk factors, demand history and every number in the UI are synthetic. Treat every output as illustrative until it runs on real data."], ["Mock layer is optional", "Every engine is implemented and tested (318 tests). USE_MOCK_* switches serve scripted demo payloads on the older endpoints; set them to false to run the real engine everywhere."], ["Prototype scale", "Up to 60 nodes and 400 lanes in the builder, a single product, a 30-day horizon at daily resolution. No BOMs or multi-echelon inventory policies."], ["In-process state", "The active network is saved to disk; what-if history, analysis and expansion results live in memory and reset on restart. No user accounts."], ["Surrogate scope", "The ML model is trained on simulator labels: a fast surrogate validated on held-out synthetic networks, not a model of real-world outcomes."], ["LLM scope", "Claude only parses scenarios, routes follow-up questions to 3 whitelisted tools and re-words engine evidence. Narration with a number the engine didn't produce is rejected."]];
+$("#limits").innerHTML = LIMITS.map(([t, d]) => `<details><summary>${t}</summary><p>${d}</p></details>`).join("");
+
+/* tilt + reveal + count-up */
+function bindTilt() {
+  document.querySelectorAll(".tilt").forEach(el => {
+    el.onpointermove = e => { const r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5; el.style.transform = `rotateY(${x * 14}deg) rotateX(${-y * 14}deg) translateZ(10px)`; };
+    el.onpointerleave = () => el.style.transform = "";
+  });
+}
+renderFeats("all");
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (!e.isIntersecting) return; e.target.classList.add("in"); io.unobserve(e.target);
+  e.target.querySelectorAll(".stat b").forEach(b => {
+    const raw = b.dataset.v, n = parseFloat(raw.replace(/[^\d.]/g, "")); if (!n || raw.startsWith("<")) return;
+    const suf = raw.replace(/[\d,.]/g, ""), t0 = performance.now();
+    const tick = now => { const k = Math.min(1, (now - t0) / 1400), v = Math.round(n * (1 - Math.pow(1 - k, 3))); b.textContent = v.toLocaleString("en-IN") + suf; if (k < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
+}), { threshold: .15 });
+document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+</script>
+</body>
+</html>
