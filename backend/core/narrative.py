@@ -85,7 +85,9 @@ def narrate(evidence: dict, template: list[dict], narrator: Callable[[dict, list
             merged = [{**t, **{k: c[k] for k in ("paragraphs", "bullets") if k in c}} for t, c in zip(template, candidate)]
             return {"sections": merged, "source": "llm", "rejected": None}
         except Exception as exc:  # noqa: BLE001 - no key, API error, bad JSON or ungrounded numbers: use the template
-            rejected = str(exc)[:300]
+            # no API key is not a rejection: the LLM simply is not configured
+            not_configured = type(exc).__name__ == "LLMUnavailable" and "not set" in str(exc)
+            rejected = None if not_configured else str(exc)[:300]
     bad = ungrounded(section_texts(template), evidence)
     return {"sections": template, "source": "template", "rejected": rejected,
             "template_ungrounded": bad or None}

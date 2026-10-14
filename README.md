@@ -1,15 +1,98 @@
+<div align="center">
 
-# AEGIS: AI Supply Chain Digital Twin & Disruption Simulator
+<img src="docs/images/banner.svg" alt="AEGIS: AI Supply Chain Digital Twin" width="100%" />
 
-A real world problem - https://www.imf.org/en/publications/wp/issues/2022/02/15/supply-bottlenecks-where-why-how-much-and-what-next-513188
+### See the disruption coming. Find the failure nobody tested for. Pick a fix that doesn't break something else.
 
-> See the disruption coming, find the failure nobody tested for, and pick a fix that doesn't break something else.
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](backend/requirements.txt)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](backend/main.py)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](frontend/package.json)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](frontend/package.json)
+[![deck.gl](https://img.shields.io/badge/3D-deck.gl%20%2B%20MapLibre-2B2D42)](frontend/src/components/map3d/Network3D.jsx)
+[![OR-Tools](https://img.shields.io/badge/Optimization-OR--Tools%20%C2%B7%20PuLP%2FCBC%20%C2%B7%20HiGHS-4285F4)](backend/core/optimizer.py)
+[![XGBoost](https://img.shields.io/badge/ML-XGBoost%20%2B%20SHAP-EB5E28)](backend/core/risk_ml.py)
+[![Claude](https://img.shields.io/badge/LLM-Claude%20(grounded)-D97757)](backend/llm/parser.py)
+[![Tests](https://img.shields.io/badge/tests-318%20passing-15803D)](backend/tests)
 
-AEGIS builds a live digital twin of a multi-tier supply chain (suppliers → factories → warehouses → customers), lets you
-throw disruptions at it (a plant fire, a flooded lane, a demand spike), and watch the ripple travel day by day. It then
-stress-tests the network on its own and recommends a recovery plan with the trade-offs laid out.
+**[Quick start](#run-it)** · **[Feature tour](#feature-tour)** · **[Screenshots](#screenshots)** · **[Architecture](#architecture)** · **[API](#api-contract)** · **[Browser extension](#browser-extension)**
 
-### Three things nobody else shows you
+</div>
+
+---
+
+**AEGIS** is a digital twin of a multi-tier supply chain: **suppliers → factories → warehouses → customers** on a live
+3D map of India. Throw a disruption at it (a plant fire, a flooded port, a festival demand spike) and watch the ripple
+travel day by day. AEGIS then finds the weak spots on its own, recommends a recovery plan with the trade-offs laid
+out, and tells you where a new warehouse or plant would pay off.
+
+> Built for a real problem: [Supply bottlenecks: where, why, how much, and what next (IMF)](https://www.imf.org/en/publications/wp/issues/2022/02/15/supply-bottlenecks-where-why-how-much-and-what-next-513188).
+> Every figure in the app is **simulated** by the AEGIS engine on your network data.
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 🧭 One-screen health
+A **Health Score** (0-100) with a transparent breakdown, five plain-language KPIs, the three risks that matter and the
+actions ranked by benefit. Made for a COO, not a data scientist.
+
+</td>
+<td width="33%" valign="top">
+
+### 🧪 Ask "what if…?"
+*"What if Supplier S2 fails for 10 days?"* gives you the impact, a day-by-day cascade, every recovery plan compared,
+and **why** the best one wins, all grounded in engine evidence.
+
+</td>
+<td width="33%" valign="top">
+
+### 🗺️ Where to grow
+Dijkstra routing + a facility-location optimiser pick the best new warehouse or plant from **60 Indian cities**, and
+the digital twin double-checks every plan.
+
+</td>
+</tr>
+</table>
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/overview.png" alt="Overview: health score, KPIs, what needs attention, recommended actions" /><br/><sub><b>Overview:</b> Health Score, KPIs, top risks and recommended actions</sub></td>
+<td width="50%" valign="top"><img src="docs/images/network-3d.png" alt="3D network map of India" /><br/><sub><b>3D twin:</b> sites as extruded columns, lanes as arcs, on a live map of India</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/whatif.png" alt="What-if planner brief" /><br/><sub><b>What-if planner:</b> impact, Monte Carlo, ML preview and a grounded brief</sub></td>
+<td width="50%" valign="top"><img src="docs/images/insights.png" alt="Insights: ranked findings with tested fixes" /><br/><sub><b>Insights:</b> ranked pain points, each with a fix tested in the simulator</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/expansion.png" alt="Expansion planner with candidate sites" /><br/><sub><b>Expansion:</b> candidate cities as ghosts, numbered picks, proposed lanes dashed</sub></td>
+<td width="50%" align="center" valign="top"><img src="docs/images/extension.png" alt="AEGIS browser extension side panel" width="62%" /><br/><sub><b>Browser extension:</b> right-click a headline → simulated impact</sub></td>
+</tr>
+</table>
+
+## Feature tour
+
+| | Feature | What it does |
+|:-:|---|---|
+| 🧭 | **Overview** | Health Score with breakdown and trend, Service level, Revenue at risk, Lead time, Stock cover, Resilience; "Fix this" buttons; actions you can mark as planned; alerts; executive brief (2-page PDF) |
+| 🌐 | **2D / 3D digital twin** | Cytoscape graph (geo or tier layout) and a deck.gl + MapLibre 3D map with camera presets, risk glow and animated flows |
+| 💥 | **Simulator** | Day-by-day min-cost flow (OR-Tools) with stock buffers, backup activation lag, delays and a **Survival Clock** (days until stock runs out) |
+| 🎲 | **Monte Carlo** | Replays a disruption 100× with realistic variation: typical loss (P50), bad case (P90), shortage probability |
+| 🔍 | **Chaos Finder** | Knocks out every site and **every pair**; surfaces *hidden pairs* that are safe alone but deadly together; ML pre-screens 2,000 scenarios in < 1 s |
+| 🛟 | **Recovery optimiser** | LP over reroute, backup supplier, overtime, safety stock, production shift and air expedite; **fix-safety check** rejects fixes that create a new weak spot |
+| 🧪 | **What-if planner** | Plain English → scenario → impact, cascade timeline, every plan compared, counterfactual attribution, sensitivity, robustness and confidence; follow-up Q&A through 3 whitelisted engine tools |
+| 🩺 | **Insights** | 8 detectors (capacity saturation with **LP shadow prices**, single points of failure, supplier concentration, inventory, lead time, route fragility, regional imbalance / bullwhip, hidden pairs), each with a stress test and re-simulated fixes |
+| 🗺️ | **Expansion planner** | Dijkstra transport matrices → capacitated facility-location **MILP** (+ greedy cross-check) → resilience check on a copy of the network; payback, service, CO₂ and Health Score before / after |
+| 🌧️ | **Weather & hazards** | Open-Meteo, flood, marine, USGS quakes and GDACS → lane risk → disruption events and weather-aware re-routing |
+| 🤖 | **ML surrogate** | XGBoost trained on **24,000 simulated scenarios** over 400 synthetic networks; conformal 80% intervals; SHAP explanations in plain English |
+| 🏭 | **Synthetic networks** | 7 network archetypes × 6 industries (FMCG, pharma cold-chain, electronics, automotive, apparel, agri); 3 ready-made demos |
+| 🛡️ | **Grounded AI** | Claude may only re-word engine evidence; any number not in the evidence is rejected and a deterministic template is used |
+| 🧩 | **Browser extension** | Right-click any news headline → **Ask AEGIS** → simulated impact in a side panel; alert badge on the toolbar |
+| 🎬 | **Demo mode** | One click loads an FMCG story (network, analysis, what-if, expansion) and a 4-step guided tour |
+
+<details>
+<summary><b>Three things nobody else shows you</b></summary>
 
 1. **Chaos Finder (reverse stress-test).** Don't wait for someone to ask "what if X fails?". AEGIS knocks out every
    node and **every pair** of nodes and ranks the damage. It surfaces *hidden pairs*: two warehouses that each look
@@ -20,41 +103,69 @@ stress-tests the network on its own and recommends a recovery plan with the trad
    single point of failure. Every candidate strategy is re-stress-tested *after* it's applied; fixes that create a
    worse vulnerability get flagged red, and the recommendation is the cheapest **safe** plan.
 
-The LLM (Claude) is used **only** to turn plain English into structured events and to narrate the playbook. It never
-computes a number: parsed events are validated against the graph, and the narration is rejected if it contains any
-number the engine didn't produce.
-
----
+</details>
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph Client["🖥️ Clients"]
+        direction LR
+        UI["React 18 + Vite + Tailwind<br/>Overview · Network · What-if · Insights<br/>Expansion · Weather · Data"]
+        MAP["Cytoscape 2D · deck.gl + MapLibre 3D"]
+        EXT["Browser extension<br/>side panel · right-click · badge"]
+    end
+    subgraph API["⚡ FastAPI"]
+        direction LR
+        R["routers: network · simulate · chaos · recover<br/>whatif · analysis · expansion · weather · upload"]
+        C[("cache<br/>memory / Redis")]
+    end
+    subgraph Engine["🧠 core engine"]
+        direction LR
+        SIM["sim.py · montecarlo.py<br/>OR-Tools min-cost flow"]
+        OPT["optimizer · strategies<br/>PuLP / CBC LP"]
+        CH["chaos · bottleneck<br/>HiGHS shadow prices"]
+        EXP["expansion<br/>Dijkstra + MILP"]
+        ML["risk_ml · features<br/>XGBoost + SHAP"]
+        SYN["synth/<br/>24k simulated scenarios"]
+    end
+    subgraph External["🌍 External"]
+        direction LR
+        LLM["Claude<br/>(narrate only, numbers validated)"]
+        WX["Open-Meteo · USGS · GDACS"]
+    end
+    UI --> R
+    MAP --- UI
+    EXT --> R
+    R <--> C
+    R --> SIM & OPT & CH & EXP & ML
+    SYN -. trains .-> ML
+    R -.-> LLM
+    R -.-> WX
 ```
-                         ┌──────────────────────────────────────────────────────────┐
-  Browser :5173          │  React 18 + Vite + Tailwind                              │
-                         │  Twin │ Simulate │ Chaos Finder │ Recover                │
-                         │  Cytoscape graph · DaySlider · Recharts · KPI tiles      │
-                         └───────────────┬──────────────────────────────────────────┘
-                                         │ axios (VITE_API_URL)
-                         ┌───────────────▼──────────────────────────────────────────┐
-  FastAPI :8000          │ routers/  network · simulate · chaos · recover · parse   │
-                         │           forecast/surrogate · upload (CSV, real)        │
-                         │   validation.py (node ids exist, severity 0..1) → 422     │
-                         │   cache.py (in-memory TTL, optional Redis) ◄──────────────┼──► Redis :6379
-                         │                │ USE_MOCK_*=true        │ USE_MOCK_*=false│
-                         │        ┌───────▼───────┐      ┌─────────▼──────────────┐  │
-                         │        │ mock/         │      │ core/                   │  │
-                         │        │ mock_data.py  │      │  graph.py   (NetworkX)  │  │
-                         │        │ demo_network  │      │  sim.py     min-cost flow│ │
-                         │        └───────────────┘      │  montecarlo lognormal   │  │
-                         │                               │  chaos.py   pair synergy│  │
-                         │                               │  optimizer  PuLP LP     │  │
-                         │                               │  strategies safety check│  │
-                         │                               │  risk_ml    XGB + SHAP  │  │
-                         │                               └─────────────────────────┘  │
-                         │  llm/parser.py → Claude: parse text→events, narrate only  │
-                         └──────────────────────────────────────────────────────────┘
-       (optional, commented out in docker-compose: PostgreSQL for run history, Neo4j for huge graphs)
+
+<details>
+<summary>Classic diagram (core flow)</summary>
+
 ```
+  Browser :5173  React + Vite + Tailwind ──axios──► FastAPI :8000 ──► core/ (NetworkX graph, OR-Tools flow, PuLP LP,
+                                                     │                 Chaos Finder, XGBoost + SHAP, Dijkstra + MILP)
+                                                     ├──► cache (in-memory TTL, optional Redis :6379)
+                                                     └──► llm/parser.py → Claude: parse text → events, narrate only
+```
+
+</details>
+
+## Tech stack
+
+**Frontend:** React 18 · Vite 8 · Tailwind CSS · Cytoscape.js · deck.gl 9 · MapLibre GL · Recharts · lucide-react ·
+Axios  
+**Backend:** Python 3.11+ · FastAPI · Pydantic v2 · NetworkX · OR-Tools · PuLP/CBC · SciPy (HiGHS) · NumPy · pandas ·
+scikit-learn · XGBoost · SHAP · PyArrow · Redis (optional)  
+**AI and data:** Anthropic Claude (grounded narration) · Open-Meteo · USGS · GDACS · CARTO basemaps  
+**Ops:** Docker Compose · pytest (318 tests) · Chrome extension (Manifest V3)
+
+---
 
 ## Run it
 
@@ -318,39 +429,47 @@ one definition, shown in its tooltip ([frontend/src/lib/glossary.js](frontend/sr
 
 | Requirement | Delivered by | Where | Status today |
 |---|---|---|---|
-| Digital twin of a multi-tier supply network | 16-node, 4-tier network on a map, with capacity, stock, reliability and utilization per node | Twin tab, `GET /network`, `core/graph.py` | Mock data; graph loader real |
-| Ingest a company's own network data | CSV upload with validation and warnings, preview or activate; manual network builder with validation, undo/redo, JSON/CSV export | Data tab, `POST /upload`, `/network/*` | **Real** |
-| Simulate disruptions (supplier, route, demand) | Event builder (node / edge / demand, start, duration, severity), 3 one-click demos, plain-English input | Simulate tab, `POST /simulate`, `POST /parse` | Mock ripple; LLM parser real behind its flag |
-| Show how disruption propagates over time | Day slider recolours nodes ok/stressed/down; event log; ripple timeline | Simulate tab | Mock |
-| Estimate delivery delays | Avg / P90 delay KPI, per-customer delay chart | Simulate → KPIs, *Delivery delay by customer* | Mock; summary helpers real |
-| Identify bottlenecks | Per-day utilization bars, bottleneck halo on the graph, peak-bottleneck list (>90%) | Simulate → *Utilization*, graph | Mock data; detection real (`core/delay.find_bottlenecks`) |
-| Quantify business impact | Unmet units, Survival Clock, revenue at risk, Monte Carlo P50/P90 | Simulate → KPIs, Monte Carlo chart | Mock |
-| Predict risk with explainable ML | Node risk score + SHAP factors on click; simulator surrogate with MAE / R² | Twin → node panel, *ML surrogate accuracy*, `GET /surrogate` | Mock (stubs in `core/risk_ml.py`) |
-| Forecast demand | 14-day forecast with P10-P90 band and backtest MAPE | Twin → *Demand forecast*, `GET /forecast` | Mock (stub in `core/forecast.py`) |
-| Find vulnerabilities proactively | Chaos Finder: single points of failure and hidden failure pairs, resilience score | Chaos Finder tab, `GET /chaos` | Mock |
-| Recommend alternate suppliers and routes | Ranked alternate suppliers (spare capacity, lead, premium, reliability), alternate paths | Recover → *Alternate suppliers / routes* | Mock (stubs in `core/recommend.py`) |
-| Optimize inventory and production | Inventory buffer and production shift strategies, concrete inventory and production actions | Recover → strategy table, *Inventory / Production actions* | Mock (LP levers stubbed in `core/optimizer.py`) |
-| Compare mitigation strategies | Cost vs unmet vs delay vs CO₂ vs resilience, ROI of acting, fix-safety check | Recover tab, `POST /recover` | Mock |
-| Actionable output for operators | Day-by-day playbook (LLM narration is guarded against invented numbers) | Recover → *Action playbook* | Mock; guard real |
+| Digital twin of a multi-tier supply network | 16-node, 4-tier network on a map, with capacity, stock, reliability and utilization per node | Twin tab, `GET /network`, `core/graph.py` | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Ingest a company's own network data | CSV upload with validation and warnings, preview or activate; manual network builder with validation, undo/redo, JSON/CSV export | Data tab, `POST /upload`, `/network/*` | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Simulate disruptions (supplier, route, demand) | Event builder (node / edge / demand, start, duration, severity), 3 one-click demos, plain-English input | Simulate tab, `POST /simulate`, `POST /parse` | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Show how disruption propagates over time | Day slider recolours nodes ok/stressed/down; event log; ripple timeline | Simulate tab | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Estimate delivery delays | Avg / P90 delay KPI, per-customer delay chart | Simulate → KPIs, *Delivery delay by customer* | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Identify bottlenecks | Per-day utilization bars, bottleneck halo on the graph, peak-bottleneck list (>90%) | Simulate → *Utilization*, graph | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Quantify business impact | Unmet units, Survival Clock, revenue at risk, Monte Carlo P50/P90 | Simulate → KPIs, Monte Carlo chart | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Predict risk with explainable ML | Node risk score + SHAP factors on click; simulator surrogate with MAE / R² | Twin → node panel, *ML surrogate accuracy*, `GET /surrogate` | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Forecast demand | 14-day forecast with P10-P90 band and backtest MAPE | Twin → *Demand forecast*, `GET /forecast` | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Find vulnerabilities proactively | Chaos Finder: single points of failure and hidden failure pairs, resilience score | Chaos Finder tab, `GET /chaos` | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Recommend alternate suppliers and routes | Ranked alternate suppliers (spare capacity, lead, premium, reliability), alternate paths | Recover → *Alternate suppliers / routes* | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Optimize inventory and production | Inventory buffer and production shift strategies, concrete inventory and production actions | Recover → strategy table, *Inventory / Production actions* | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Compare mitigation strategies | Cost vs unmet vs delay vs CO₂ vs resilience, ROI of acting, fix-safety check | Recover tab, `POST /recover` | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Actionable output for operators | Day-by-day playbook (LLM narration is guarded against invented numbers) | Recover → *Action playbook* | **Real** (mock layer optional via `USE_MOCK_*`) |
+| Plan recovery for a stated scenario | What-if planner: impact, cascade, every plan compared, attribution, sensitivity, confidence, follow-up Q&A | What-if tab, `/whatif/*` | **Real** |
+| Find bottlenecks and pain points | 8 detectors with stress tests and re-simulated fixes, LP shadow prices, Health Score | Insights tab, `/analysis/*` | **Real** |
+| Decide where to expand | Dijkstra + facility-location MILP + resilience check on a network copy | Expansion tab, `/expansion/*` | **Real** |
+| Executive reporting | Overview dashboard, executive brief (PDF), CSV exports, demo mode | Overview tab | **Real** |
 
 ## Limitations (honest)
 
 - **Synthetic data.** The network, risk factors, demand history and every number in the UI are synthetic and shaped
   to look realistic for Indian logistics. Nothing is calibrated against real suppliers, so treat every output as
   illustrative until it runs on real data.
-- **Mostly mocked engine.** In this build the simulator, Monte Carlo, Chaos Finder, optimizer, recommender, risk model,
-  forecast and surrogate are documented stubs. The mock layer returns plausible, scenario-dependent numbers from a
-  simple heuristic, not from the algorithms described. The table below lists exactly what is real.
-- **Small prototype.** 16 nodes and 23 lanes, a single product, a 30-day horizon at daily resolution. No multi-echelon
-  inventory policies, BOMs, transport modes, or contracts.
-- **In-process state.** An uploaded network lives in memory until the backend restarts; there are no accounts and no
-  persistence.
+- **Mock layer is optional.** Every engine described here is implemented and tested (318 tests). The `USE_MOCK_*`
+  switches (default `true` for the preset) serve scripted demo payloads on the older Simulate / Chaos Finder /
+  Recover endpoints; set them to `false` to run the real engine everywhere. What-if, Insights, Expansion and Weather
+  always use the real engine.
+- **Prototype scale.** Networks of up to 60 nodes and 400 lanes in the builder, a single product, a 30-day horizon at
+  daily resolution. Lead times enter as delay, not shipping lag; no BOMs or multi-echelon inventory policies.
+- **In-process state.** The active network is saved to disk; what-if history, analysis and expansion results live in
+  memory and reset when the backend restarts. There are no user accounts.
+- **Surrogate scope.** The ML model is trained on simulator labels, so it is a fast surrogate validated on held-out
+  synthetic networks, not a model of real-world outcomes. Expansion site costs use illustrative indices.
 - **Scaling path, not built yet:** Neo4j for graph storage and path queries on 10k+ node networks; Redis (already
   wired as an optional cache) for shared result caching and as a job queue for Monte Carlo and Chaos Finder batches
   (the ML surrogate pre-screen, `GET /chaos/prescreen`, is built); PostgreSQL for
   scenario and run history. Postgres and Neo4j are commented out in `docker-compose.yml`.
-- **LLM scope.** Claude only parses scenarios and narrates the playbook. Parsed events are validated against the graph,
-  and narration containing numbers the engine didn't produce is rejected.
+- **LLM scope.** Claude only parses scenarios, routes follow-up questions to 3 whitelisted engine tools and re-words
+  engine evidence. Parsed events are validated against the graph, and any narration containing a number the engine
+  didn't produce is rejected in favour of a deterministic template.
 
 ## Who owns what
 
@@ -376,27 +495,37 @@ Contract rule: nobody changes `schemas.py` without telling C and D. Mock and liv
 - [x] `/forecast`, `/surrogate`, `/upload` (CSV upload is real), tests for all new endpoints
 
 **Phase 1: Simulation core (A)**
-- [ ] `sim.solve_flow`: min-cost flow with node splitting (NetworkX / OR-Tools)
-- [ ] `sim.simulate`: day loop, stock drawdown, node status, per-day utilization, Survival Clock
-- [ ] `delay.customer_delays`: lead-time-aware delay model (SimPy)
-- [ ] `montecarlo.monte_carlo`: lognormal durations, P50/P90
-- [ ] Set `USE_MOCK_SIMULATE=false` and keep the tests green
+- [x] `sim.solve_flow`: min-cost flow with node splitting (NetworkX / OR-Tools)
+- [x] `sim.simulate`: day loop, stock drawdown, node status, per-day utilization, Survival Clock
+- [x] `delay.customer_delays`: lead-time-aware delay model (SimPy)
+- [x] `montecarlo.monte_carlo`: lognormal durations, P50/P90
+- [x] Set `USE_MOCK_SIMULATE=false` and keep the tests green
 
 **Phase 2: Chaos + recovery (B)**
-- [ ] `chaos.chaos_find`: singles + pruned pair-synergy search
-- [ ] `chaos.resilience_score`
-- [ ] `optimizer.optimize_plan` with the `safety_stock_lever` and `production_shift_lever` levers (PuLP)
-- [ ] `recommend.alternate_suppliers` / `alternate_routes`
-- [ ] `strategies.run_strategies` + `safety_check` (re-run Chaos Finder on the post-fix graph)
+- [x] `chaos.chaos_find`: singles + pruned pair-synergy search
+- [x] `chaos.resilience_score`
+- [x] `optimizer.optimize_plan` with the `safety_stock_lever` and `production_shift_lever` levers (PuLP)
+- [x] `recommend.alternate_suppliers` / `alternate_routes`
+- [x] `strategies.run_strategies` + `safety_check` (re-run Chaos Finder on the post-fix graph)
 
 **Phase 3: Intelligence (D)**
-- [ ] `risk_ml.train_risk_model` (XGBoost on synthetic disruption history) + `node_risk_with_shap`
-- [ ] `risk_ml.train_surrogate` + `surrogate_report` (MAE / R² on held-out scenarios)
-- [ ] `forecast.forecast_demand`: Holt-Winters vs XGBoost lag model, backtest MAPE
-- [ ] Live `/parse` with `ANTHROPIC_API_KEY`; add eval prompts for tricky phrasing
-- [ ] `write_playbook` wired into `/recover` with the number-grounding guard
+- [x] `risk_ml.train_risk_model` (XGBoost on synthetic disruption history) + `node_risk_with_shap`
+- [x] `risk_ml.train_surrogate` + `surrogate_report` (MAE / R² on held-out scenarios)
+- [x] `forecast.forecast_demand`: Holt-Winters vs XGBoost lag model, backtest MAPE
+- [x] Live `/parse` with `ANTHROPIC_API_KEY`; add eval prompts for tricky phrasing
+- [x] `write_playbook` wired into `/recover` with the number-grounding guard
 
 **Phase 4: Polish and demo (C + all)**
-- [ ] Edge disruptions drawn on the graph (dashed red lanes)
-- [ ] Before/after resilience comparison on the Recover tab
-- [ ] 3-minute demo script: Twin → Supplier failure → Chaos Finder hidden pair → Recover (cheapest fix fails safety check)
+- [x] Edge disruptions drawn on the graph (dashed red lanes)
+- [x] Before/after resilience comparison on the Recover tab
+- [x] 3-minute demo script: Twin → Supplier failure → Chaos Finder hidden pair → Recover (cheapest fix fails safety check)
+
+**Phase 5: Intelligence upgrade (done)**
+- [x] Synthetic data generator (7 archetypes x 6 industries) + 24,000-scenario dataset + data card
+- [x] Scenario surrogate (XGBoost, conformal intervals, SHAP) beating mean and centrality baselines on held-out networks
+- [x] What-if recovery planner with grounded narration; Insights analyzer with tested fixes and Health Score
+
+**Phase 6: Expansion and executive experience (done)**
+- [x] Expansion planner (Dijkstra + facility-location MILP + resilience evaluation), apply as one undoable step
+- [x] Overview dashboard, Executive / Analyst views, demo mode with tour, executive brief, Weather page
+- [x] Browser extension (side panel, right-click "Ask AEGIS", alert badge)
