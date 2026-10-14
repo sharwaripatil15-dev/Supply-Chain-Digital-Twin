@@ -42,7 +42,7 @@ function fitCapped(cy) {
   }
 }
 
-function buildElements(network, { statuses, utilization, disrupted, highlight, hiddenKinds, layout, dark, surface, outline }) {
+function buildElements(network, { statuses, utilization, disrupted, highlight, hiddenKinds, layout, dark, surface, outline, ghost }) {
   const visible = network.nodes.filter((n) => !hiddenKinds?.has(n.kind))
   const ids = new Set(visible.map((n) => n.id))
   const tiers = layout === 'tiers' ? tierPositions(visible) : null
@@ -84,6 +84,38 @@ function buildElements(network, { statuses, utilization, disrupted, highlight, h
         classes: disrupted?.edges.has(id) ? 'disrupted' : '',
       }
     })
+  return [...nodes, ...edges, ...ghostElements(ghost, { ids, tiers, layout, dark, outline, surface, maxCap })]
+}
+
+/**
+ * Expansion preview: candidate sites as ghost nodes (same type shape and color, semi-transparent, dashed outline),
+ * recommended sites with numbered labels, and proposed lanes as dashed accent lines. Encodings of existing nodes and
+ * lanes are untouched. ghost = { nodes: [{ id, kind, name, lat, lon, rank? }], edges: [{ source, target, capacity }] }
+ */
+function ghostElements(ghost, { ids, tiers, layout, dark, outline, surface }) {
+  if (!ghost) return []
+  const placed = new Set(ids)
+  const tierPos = layout === 'tiers' ? tierPositions(ghost.nodes.filter((n) => n.rank)) : null
+  const nodes = []
+  for (const n of ghost.nodes) {
+    if (layout === 'tiers' && !n.rank) continue
+    const t = typeOf(n.kind)
+    const [lon, lat] = nodePosition(n)
+    placed.add(n.id)
+    nodes.push({
+      data: {
+        id: n.id, label: n.rank ? `${n.rank}
+${short(n.name)}` : short(n.name, 14), color: t.color, shape: t.shape2d,
+        icon: ICONS[n.kind] || glyphDataUri(n.kind), size: SIZE[n.kind] || 24, iconY: '50%',
+        outline: dark && t.outlineDark ? t.outlineDark : dark ? outline : surface, glowOpacity: 0, glowPad: 0,
+      },
+      position: tierPos ? { x: (tierPos[n.id]?.x ?? 0) + TIER_GAP_X / 2, y: (tierPos[n.id]?.y ?? 0) + ROW_GAP_Y * 3 } : { x: lon * SCALE_X, y: -lat * SCALE_Y },
+      classes: n.rank ? 'ghost ghost-picked' : 'ghost',
+    })
+  }
+  const edges = (ghost.edges || [])
+    .filter((e) => placed.has(e.source) && placed.has(e.target))
+    .map((e) => ({ data: { id: `ghost:${e.source}->${e.target}`, source: e.source, target: e.target, color: '', w: 1.6 }, classes: 'proposed' }))
   return [...nodes, ...edges]
 }
 
@@ -160,6 +192,15 @@ function stylesheet(t) {
         'transition-duration': '150ms',
       },
     },
+    { selector: 'node.ghost', style: { opacity: 0.45, 'border-style': 'dashed', 'border-width': 2, 'border-color': 'data(color)', 'font-size': 10 } },
+    {
+      selector: 'node.ghost-picked',
+      style: { opacity: 1, 'border-width': 3, 'border-color': t.color.accent, 'underlay-color': t.color.accent, 'underlay-opacity': 0.3, 'underlay-padding': 10, 'font-size': 13, 'font-weight': 600, color: t.color.fg },
+    },
+    {
+      selector: 'edge.proposed',
+      style: { 'line-color': t.color.accent, 'target-arrow-color': t.color.accent, 'line-style': 'dashed', 'line-dash-pattern': [7, 5], width: 2, opacity: 0.95 },
+    },
     {
       selector: 'edge.disrupted',
       style: { 'line-color': t.color.bad, 'target-arrow-color': t.color.bad, 'line-style': 'dashed', 'line-dash-pattern': [6, 4], opacity: 1 },
@@ -172,7 +213,7 @@ function stylesheet(t) {
  * hiddenKinds: Set of kinds hidden by the legend. layout: 'geo' (lat/lon) | 'tiers'. fitSignal: bump to re-fit.
  */
 export default function NetworkGraph({
-  network: override, statuses = null, utilization = null, disrupted = null, highlight = null, hiddenKinds = null, layout = 'geo', fitSignal = 0,
+  network: override, statuses = null, utilization = null, disrupted = null, highlight = null, hiddenKinds = null, layout = 'geo', fitSignal = 0, ghost = null, onGhost = null,
 }) {
   const store = useStore()
   const { tokens, theme } = useTheme()
@@ -185,10 +226,10 @@ export default function NetworkGraph({
     () =>
       network
         ? buildElements(network, {
-            statuses, utilization, disrupted, highlight, hiddenKinds, layout, dark: theme === 'dark', surface: tokens.color.surface, outline: tokens.alpha('fg', 0.32),
+            statuses, utilization, disrupted, highlight, hiddenKinds, layout, dark: theme === 'dark', surface: tokens.color.surface, outline: tokens.alpha('fg', 0.32), ghost,
           })
         : [],
-    [network, statuses, utilization, disrupted, highlight, hiddenKinds, layout, theme, tokens],
+    [network, statuses, utilization, disrupted, highlight, hiddenKinds, layout, theme, tokens, ghost],
   )
   const styles = useMemo(() => stylesheet(tokens), [tokens])
   const cyLayout = useMemo(() => ({ name: 'preset', fit: false }), [])
@@ -196,7 +237,7 @@ export default function NetworkGraph({
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return undefined
-    const onTap = (e) => selectNode(e.target.id())
+    const onTap = (e) => (e.target.hasClass('ghost') ? onGhost?.(e.target.id()) : selectNode(e.target.id()))
     const onBg = (e) => e.target === cy && selectNode(null)
     const onOver = (e) => {
       const p = e.target.renderedPosition()
@@ -215,7 +256,7 @@ export default function NetworkGraph({
       cy.off('mouseout', 'node', onOut)
       cy.off('viewport', onOut)
     }
-  }, [selectNode, network])
+  }, [selectNode, network, onGhost])
 
   // Keep Cytoscape's selection in step with the store (selection can come from tables, 3D or the inspector).
   useEffect(() => {

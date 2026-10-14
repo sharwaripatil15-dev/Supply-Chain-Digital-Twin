@@ -23,5 +23,7 @@ Thumbs.db
 *.pkl
 *.joblib
 
-# Saved active network (backend/data/active_network.json)
-backend/data/
+# Saved active network (backend/data/active_network.json) and regenerable datasets (python -m core.synth.build)
+backend/data/active_network*.json
+backend/data/*.tmp
+backend/data/synth/*.parquet

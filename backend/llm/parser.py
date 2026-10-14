@@ -147,3 +147,105 @@ def write_playbook(facts: dict[str, Any]) -> list[str]:
     if invented:
         raise LLMUnavailable(f"Narrator used numbers not produced by the engine: {invented[:5]}")
     return steps
+
+
+# ---------------------------------------------------------------- what-if / analysis narration and Q&A routing
+class _NarratedSection(BaseModel):
+    key: str
+    paragraphs: list[str]
+    bullets: list[str]
+
+
+class _Narration(BaseModel):
+    sections: list[_NarratedSection]
+
+
+def narrate_sections(evidence: dict[str, Any], sections: list[dict]) -> list[dict]:
+    """Re-word deterministic template sections for a supply-chain manager. The caller (core.narrative) rejects the
+    result if it contains any number that is not in `evidence`. Raises LLMUnavailable without a key or on API errors."""
+    system = (
+        "You edit the text of a supply-chain decision brief. You receive EVIDENCE (JSON produced by a simulator) and "
+        "DRAFT sections. Rewrite each section's paragraphs and bullets so they read clearly for an operations manager. "
+        "Rules: keep every section, in the same order, with the same key; keep the same number of bullets; use ONLY "
+        "facts and numbers present in EVIDENCE or the DRAFT - never calculate, estimate, round differently, convert "
+        "units or invent a number; copy *_display strings verbatim; keep the word 'simulated' where the draft has it."
+    )
+    payload = json.dumps({"evidence": evidence, "draft": [{k: s.get(k) for k in ("key", "title", "paragraphs", "bullets")} for s in sections]},
+                         default=str, ensure_ascii=False)
+    parsed = _call(system=system, messages=[{"role": "user", "content": payload}], output_format=_Narration)
+    return [{"key": s.key, "paragraphs": s.paragraphs, "bullets": s.bullets} for s in parsed.sections]
+
+
+ROUTER_TOOLS = [
+    {
+        "name": "run_scenario", "strict": True,
+        "description": "Re-run the current what-if scenario with extra disruption events added (e.g. a second site "
+                       "failing or the backup supplier being delayed). Use node ids and lanes from the network list.",
+        "input_schema": {
+            "type": "object", "additionalProperties": False, "required": ["add_events", "assumption"],
+            "properties": {
+                "add_events": {"type": "array", "items": {
+                    "type": "object", "additionalProperties": False,
+                    "required": ["type", "target", "start", "duration", "severity"],
+                    "properties": {"type": {"type": "string", "enum": ["node", "edge", "demand"]},
+                                   "target": {"type": "string"}, "start": {"type": "integer"},
+                                   "duration": {"type": "integer"}, "severity": {"type": "number"}}}},
+                "assumption": {"type": "string", "description": "how the question was turned into events"},
+            },
+        },
+    },
+    {
+        "name": "run_strategy", "strict": True,
+        "description": "Evaluate one recovery plan on the current scenario.",
+        "input_schema": {"type": "object", "additionalProperties": False, "required": ["name"],
+                         "properties": {"name": {"type": "string", "description": "exact plan name from the list"}}},
+    },
+    {
+        "name": "compare_plans", "strict": True,
+        "description": "Compare two to four recovery plans side by side (e.g. 'why not air freight?' compares the "
+                       "recommended plan with 'Expedite by air').",
+        "input_schema": {"type": "object", "additionalProperties": False, "required": ["names"],
+                         "properties": {"names": {"type": "array", "items": {"type": "string"}}}},
+    },
+    {
+        "name": "decline", "strict": True,
+        "description": "Use when the question cannot be answered by one of the other tools.",
+        "input_schema": {"type": "object", "additionalProperties": False, "required": ["reason"],
+                         "properties": {"reason": {"type": "string"}}},
+    },
+]
+
+
+def route_question(question: str, run: dict, G: nx.DiGraph) -> dict:
+    """Route a follow-up question to exactly one whitelisted engine tool: {"tool", "args"} or {"decline": reason}.
+
+    The model only chooses the tool and its arguments; the engine computes every number. Raises LLMUnavailable."""
+    import anthropic
+
+    plans = [p["name"] for p in run.get("plans", [])]
+    system = (
+        "You route follow-up questions about a supply-chain what-if analysis to exactly one tool. Always answer with "
+        "exactly one tool call and no text. Use 'decline' for anything the other tools cannot answer (general "
+        "knowledge, editing data, opinions). The current scenario events: " + json.dumps(run.get("events", []))
+        + f". Recommended plan: {run.get('recommended')}. Plan names: {plans}.\n\n" + _network_brief(G)
+    )
+    try:
+        response = _client().messages.create(
+            model=settings.anthropic_model, max_tokens=16000, system=system, tools=ROUTER_TOOLS,
+            tool_choice={"type": "auto"}, messages=[{"role": "user", "content": question}],
+        )
+    except LLMUnavailable:
+        raise
+    except anthropic.APIConnectionError as exc:
+        raise LLMUnavailable("Cannot reach the Anthropic API.") from exc
+    except anthropic.APIStatusError as exc:
+        raise LLMUnavailable(f"The Anthropic API returned an error ({exc.status_code}).") from exc
+    if response.stop_reason == "refusal":
+        raise LLMUnavailable("The model declined this request.")
+    calls = [b for b in response.content if b.type == "tool_use"]
+    if len(calls) != 1:
+        raise LLMUnavailable("The router did not choose exactly one tool.")
+    call = calls[0]
+    if call.name == "decline":
+        return {"decline": str(call.input.get("reason") or "That question can't be answered by the engine.")}
+    return {"tool": call.name, "args": dict(call.input)}

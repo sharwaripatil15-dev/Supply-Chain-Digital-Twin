@@ -319,9 +319,11 @@ class NetworkStore:
 def invalidate_caches() -> None:
     """Drop everything computed from a graph: API responses (memory + Redis), chaos scans, Monte Carlo, forecasts."""
     from cache import cache
-    from core import chaos, forecast, montecarlo
+    from core import chaos, expansion, features, forecast, montecarlo
 
     cache.clear()
+    features._CTX_CACHE.clear()
+    expansion._TM_CACHE.clear()
     chaos._SCAN_CACHE.clear()
     montecarlo._CACHE.clear()
     forecast._CACHE.clear()

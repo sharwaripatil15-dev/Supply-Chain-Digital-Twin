@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "AEGIS Supply Chain Copilot",
+  "short_name": "AEGIS",
+  "version": "1.0.0",
+  "description": "Turn any news headline into a simulated supply-chain impact, and keep an eye on your network's health and alerts.",
+  "permissions": ["contextMenus", "sidePanel", "storage", "alarms"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "action": {
+    "default_title": "AEGIS: supply chain health and what-if",
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+}

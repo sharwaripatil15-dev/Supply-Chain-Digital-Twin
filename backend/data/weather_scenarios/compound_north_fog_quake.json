@@ -1,0 +1,29 @@
+{
+  "id": "compound-north-fog-quake",
+  "label": "Compound event: North India fog + M6.0 earthquake",
+  "description": "Dense fog (under 150 m visibility) over the Delhi-Jaipur-Agra roads for four days, and an M6.0 earthquake 80 km from the northernmost factory on day 3.",
+  "seed": 37,
+  "days": 7,
+  "anchors": {
+    "delhi": {"city": "Delhi", "lat": 28.61, "lon": 77.21},
+    "jaipur": {"city": "Jaipur", "lat": 26.91, "lon": 75.79},
+    "agra": {"city": "Agra", "lat": 27.18, "lon": 78.01},
+    "quake": {"pick": "northernmost", "kind": "factory", "offset_km": 80, "bearing_deg": 0, "label": "northern factory", "lat": 29.0, "lon": 77.7}
+  },
+  "hazards": [
+    {"id": "fog-delhi", "type": "fog", "label": "Dense fog, Delhi NCR", "anchor": "delhi", "radius_km": 240,
+     "fields": {"visibility_m": [3000, 140, 115, 105, 130, 2500, 7000]}},
+    {"id": "fog-jaipur", "type": "fog", "label": "Dense fog, Jaipur", "anchor": "jaipur", "radius_km": 200,
+     "fields": {"visibility_m": [3500, 145, 120, 110, 140, 3000, 7000]}},
+    {"id": "fog-agra", "type": "fog", "label": "Dense fog, Agra", "anchor": "agra", "radius_km": 200,
+     "fields": {"visibility_m": [3500, 150, 125, 115, 145, 3000, 7000]}},
+    {"id": "quake", "type": "quake", "label": "M6.0 earthquake", "anchor": "quake", "magnitude": 6.0, "day": 3}
+  ],
+  "expected": [
+    {"check": "lanes_at_level", "cities": ["Delhi", "Jaipur", "Agra"], "days": [1, 4], "modes": ["road"], "min_level": "high", "lead_between": [1.6, 2.2], "min_count": 2},
+    {"check": "node_partial_loss", "kind": "factory"},
+    {"check": "mode_switch_option", "to": "rail"},
+    {"check": "mixed_actions", "any_of": ["production_shift", "preposition", "alternate_supplier"], "min_kinds": 2},
+    {"check": "chaos_changes"}
+  ]
+}

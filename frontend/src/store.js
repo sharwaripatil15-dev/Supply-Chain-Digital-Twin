@@ -36,7 +36,7 @@ export const DEMO_SCENARIOS = [
 export const SOURCE_LABEL = { preset: 'Preset demo', csv: 'CSV upload', manual: 'Manual network' }
 
 const initial = {
-  tab: 'twin',
+  tab: 'overview',
   network: null,
   source: null, // GET /network/source: { source, version, runnable, ... }
   upload: null,
@@ -54,11 +54,19 @@ const initial = {
   manual: null, // GET /network/manual: { source, version, nodes, edges, validation }
   history: { past: [], future: [] }, // builder undo/redo: { label, nodes, edges } snapshots
   builderSelection: null, // { type: 'node' | 'edge', id } shared by the builder tables and its map
+  whatif: null, // POST /whatif/run result (the run on screen)
+  whatifAsks: [], // follow-up answers for that run
+  whatifHistory: null, // GET /whatif/history
+  whatifDraft: null, // { text?, events?, note? } prefilled by "Apply fix" or the Simulate scenario
+  analysis: null, // POST /analysis/run | GET /analysis/latest
+  expansion: null, // expansion run: { status: running, progress } or the finished result
+  baseline: null, // GET /expansion/baseline: today's KPIs from the flow engine
+  selectedFinding: null,
   loading: {},
   errors: {},
 }
 
-const snapshot = (manual, label) => ({ label, nodes: manual?.nodes ?? [], edges: manual?.edges ?? [] })
+const snapshot = (manual, label, source) => ({ label, nodes: manual?.nodes ?? [], edges: manual?.edges ?? [], source: source?.source })
 
 /** Results computed for an older network version are dropped; events are kept only if they still fit. */
 function forNewNetwork(s, network, source) {
@@ -70,6 +78,11 @@ function forNewNetwork(s, network, source) {
     recover: null,
     recoverFor: null,
     forecast: null,
+    whatif: null,
+    whatifAsks: [],
+    analysis: null,
+    baseline: null, // (an expansion result is kept: the page flags it as computed for an earlier network version)
+    selectedFinding: null,
     day: 0,
     selectedNode: ids.has(s.selectedNode) ? s.selectedNode : null,
     // a different source (or first load) gets scenarios for that network; an edit keeps the scenario if it still fits
@@ -130,7 +143,7 @@ export function StoreProvider({ children }) {
      * network when the manual one is live so every tab updates. Resolves { ok, data } or { ok: false, error, fields }.
      */
     const mutate = async (label, fn, { record = true } = {}) => {
-      const before = snapshot(stateRef.current.manual, label)
+      const before = snapshot(stateRef.current.manual, label, stateRef.current.source)
       patch((s) => ({ loading: { ...s.loading, builder: true }, errors: { ...s.errors, builder: null } }))
       try {
         const res = await fn()
@@ -154,8 +167,17 @@ export function StoreProvider({ children }) {
       const stack = dir === 'undo' ? history.past : history.future
       if (!stack.length) return null
       const target = stack[stack.length - 1]
-      const current = snapshot(manual, target.label)
-      const res = await mutate(target.label, () => api.importNetwork({ nodes: target.nodes, edges: target.edges }), { record: false })
+      const current = snapshot(manual, target.label, stateRef.current.source)
+      const res = await mutate(
+        target.label,
+        async () => {
+          const out = await api.importNetwork({ nodes: target.nodes, edges: target.edges })
+          // an action that switched the active source (e.g. adding an expansion plan to the preset) switches it back
+          if (target.source && target.source !== stateRef.current.source?.source) await api.setSource(target.source)
+          return out
+        },
+        { record: false },
+      )
       if (res.ok) {
         patch((s) =>
           dir === 'undo'
@@ -192,6 +214,47 @@ export function StoreProvider({ children }) {
       runRecover: (events) =>
         request('recover', () => api.recover(events), (recover) => ({ recover, recoverFor: events })),
       parseText: (text) => request('parse', () => api.parse(text), (res) => ({ events: res.events })),
+
+      // ---------------------------------------------- what-if planner
+      runWhatIf: async (body) => {
+        const res = await request('whatif', () => api.whatifRun(body), (whatif) => ({ whatif, whatifAsks: [] }))
+        request('whatifHistory', api.whatifHistory, (h) => ({ whatifHistory: h.runs }))
+        return res
+      },
+      askWhatIf: (runId, question) =>
+        request('whatifAsk', () => api.whatifAsk(runId, question), (ans, s) => ({ whatifAsks: [...s.whatifAsks, ans] })),
+      loadWhatIfHistory: () => request('whatifHistory', api.whatifHistory, (h) => ({ whatifHistory: h.runs })),
+      openWhatIf: (id) => request('whatif', () => api.whatifGet(id), (whatif) => ({ whatif, whatifAsks: [] })),
+      setWhatIfDraft: (whatifDraft) => patch({ whatifDraft, tab: 'whatif' }),
+      clearWhatIfDraft: () => patch({ whatifDraft: null }),
+
+      // ---------------------------------------------- expansion planner
+      runExpansion: async (body) => {
+        const job = await request('expansion', () => api.expansionRun(body), (expansion) => ({ expansion }))
+        if (!job) return null
+        let cur = job
+        while (cur && cur.status === 'running') {
+          await new Promise((r) => setTimeout(r, 700))
+          if (stateRef.current.expansion?.id !== job.id && stateRef.current.expansion?.job_id !== job.id) return null // superseded
+          cur = await request('expansion', () => api.expansionResult(job.id), (expansion) => ({ expansion }))
+        }
+        return cur
+      },
+      cancelExpansion: async () => {
+        const id = stateRef.current.expansion?.id
+        if (id) await request('expansion', () => api.expansionCancel(id), (expansion) => ({ expansion }))
+      },
+      loadExpansionLatest: () => request('expansionLatest', api.expansionLatest, (res, s) => (res.status === 'ok' || !s.expansion ? { expansion: res } : {})),
+      applyExpansion: async (planId, label) => {
+        if (!stateRef.current.manual) patch({ manual: await api.manual() })
+        return mutate(label || 'Add expansion plan', () => api.expansionApply(planId))
+      },
+      loadBaseline: () => request('baseline', api.expansionBaseline, (baseline) => ({ baseline })),
+
+      // ---------------------------------------------- supply chain analysis
+      runAnalysis: () => request('analysis', api.analysisRun, (analysis) => ({ analysis })),
+      loadAnalysis: () => request('analysis', api.analysisLatest, (analysis) => ({ analysis })),
+      selectFinding: (selectedFinding) => patch({ selectedFinding }),
 
       // ---------------------------------------------- active source + builder
       setSource: async (source) => {

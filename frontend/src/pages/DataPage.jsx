@@ -6,6 +6,8 @@ import { useUi } from '../ui.jsx'
 import { Button, InlineError, Panel, PanelHeader, SegmentedControl, StatusDot, TabPanel, Tabs, useToast } from '../components/ui/index.js'
 import CsvUpload from '../components/CsvUpload.jsx'
 import SurrogateAccuracy from '../components/SurrogateAccuracy.jsx'
+import ScenarioModel from '../components/ScenarioModel.jsx'
+import SyntheticNetworks from '../components/SyntheticNetworks.jsx'
 import ForecastChart from '../components/ForecastChart.jsx'
 import ManualBuilder from '../components/builder/ManualBuilder.jsx'
 
@@ -99,7 +101,12 @@ export default function DataPage() {
                 )}
               </div>
               {source?.note && <InlineError message={source.note} />}
-              {view === 'preset' && <PresetPanel onCopied={() => ui.setDataView('manual')} />}
+              {view === 'preset' && (
+                <>
+                  <PresetPanel onCopied={() => ui.setDataView('manual')} />
+                  <SyntheticNetworks onLoaded={() => ui.setDataView('manual')} />
+                </>
+              )}
               {view === 'csv' && <CsvUpload />}
               {view === 'manual' && <ManualBuilder />}
             </div>
@@ -107,6 +114,7 @@ export default function DataPage() {
             <div className="grid gap-3 xl:grid-cols-2">
               <SurrogateAccuracy />
               <ForecastChart />
+              <ScenarioModel />
             </div>
           )}
         </TabPanel>

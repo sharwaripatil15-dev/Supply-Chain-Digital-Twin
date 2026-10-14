@@ -73,6 +73,9 @@ class Event(BaseModel):
         default=None, ge=1, le=10, description="edge events: lead time x this factor while active (weather slowdowns)"
     )
     reason: str | None = Field(default=None, max_length=300, description="plain-English cause, e.g. the weather drivers")
+    direction: Literal["up", "down"] | None = Field(
+        default=None, description='demand events: "down" = demand falls by severity (default "up": rises by severity)'
+    )
 
 
 class SimulateRequest(BaseModel):
@@ -274,6 +277,10 @@ class SurrogateResponse(BaseModel):
     n_test: int
     speedup: float = Field(description="simulator runtime / surrogate runtime")
     top_features: list[FeatureImportance]
+    scenario: dict[str, Any] | None = Field(
+        default=None, description="scenario surrogate held-out metrics (models/metrics.json): per target MAE, RMSE, R2, "
+        "Spearman, top-10 recall, interval coverage, baselines, timing; null if no model has been trained"
+    )
 
 
 # ---------------------------------------------------------------- upload
@@ -435,11 +442,48 @@ class EdgeMutationResponse(BaseModel):
     validation: ValidationReport
 
 
+class SynthNetwork(BuilderNetwork):
+    """A generated network as builder JSON (import it with POST /network/import)."""
+    meta: dict[str, Any] = Field(default_factory=dict, description="archetype, industry, seed, size, unit price ...")
+
+
+class GenerateNetworkRequest(BaseModel):
+    archetype: Literal["linear", "multi_source", "hub_spoke", "two_region_port", "backup_supplier", "concentrated", "long_tail"]
+    industry: Literal["fmcg", "pharma", "electronics", "automotive", "apparel", "agri"]
+    n_nodes: int = Field(default=24, ge=10, le=60)
+    seed: int | None = Field(default=None, ge=0, description="omit for a fresh random network")
+
+
 class ExportedNetwork(BuilderNetwork):
     format: Literal["aegis-network"] = "aegis-network"
     schema_version: int = 1
     source: NetworkSource
     version: int
+
+
+# ---------------------------------------------------------------- what-if (/whatif/*)
+class WhatIfRunRequest(BaseModel):
+    text: str | None = Field(default=None, min_length=3, max_length=2000, description='e.g. "What if Supplier S2 fails for 10 days?"')
+    events: list[Event] | None = Field(default=None, description="structured scenario (overrides text)")
+    horizon: int = Field(default=30, ge=5, le=90)
+    mc_runs: int = Field(default=100, ge=10, le=1000, description="Monte Carlo runs of the exact simulator")
+    robustness_runs: int = Field(default=10, ge=0, le=50, description="Monte Carlo realisations re-planned for robustness")
+    seed: int = 7
+
+    @model_validator(mode="after")
+    def _need_input(self) -> "WhatIfRunRequest":
+        if not self.events and not self.text:
+            raise ValueError("give either a question (text) or events")
+        return self
+
+
+class WhatIfAskRequest(BaseModel):
+    run_id: str = Field(min_length=1, max_length=40)
+    question: str = Field(min_length=2, max_length=500)
+
+
+class WhatIfCompareRequest(BaseModel):
+    ids: list[str] = Field(min_length=2, max_length=4)
 
 
 # ---------------------------------------------------------------- weather (/weather/*)

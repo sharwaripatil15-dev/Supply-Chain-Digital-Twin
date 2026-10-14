@@ -1,0 +1,43 @@
+{
+  "id": "cyclone-east-coast",
+  "label": "Cyclone landfall, East Coast",
+  "description": "A severe cyclonic storm crosses the coast just north of Chennai on day 2 and tracks up the Andhra-Odisha coast: gusts to ~120 km/h, 150-250 mm of rain, 5-7 m waves near the coast.",
+  "seed": 11,
+  "days": 7,
+  "anchors": {
+    "landfall": {"city": "Chennai", "lat": 13.08, "lon": 80.27}
+  },
+  "hazards": [
+    {
+      "id": "cyclone", "type": "cyclone", "label": "Severe cyclonic storm", "anchor": "landfall",
+      "track": [
+        {"day": 0, "dlat": -1.4, "dlon": 4.2},
+        {"day": 1, "dlat": -0.7, "dlon": 2.2},
+        {"day": 2, "dlat": 0.25, "dlon": 0.25},
+        {"day": 3, "dlat": 1.6, "dlon": 0.5},
+        {"day": 4, "dlat": 3.6, "dlon": 1.6},
+        {"day": 5, "dlat": 5.4, "dlon": 3.4}
+      ],
+      "radius_km": [200, 210, 230, 210, 180, 140],
+      "fields": {
+        "wind_gust_kmh": [75, 100, 122, 105, 80, 55],
+        "rain_mm": [60, 150, 240, 200, 150, 70],
+        "wave_height_m": [4.5, 6.0, 7.0, 5.5, 3.5, 2.5]
+      }
+    },
+    {
+      "id": "rainbands", "type": "rain", "label": "Trailing rain bands", "anchor": "landfall",
+      "radius_km": 190,
+      "fields": {"rain_mm": [5, 40, 180, 165, 135, 30, 5]}
+    }
+  ],
+  "expected": [
+    {"check": "lanes_at_level", "cities": ["Chennai"], "days": [2, 4], "min_level": "severe", "min_count": 2},
+    {"check": "lanes_at_level", "cities": ["Chennai"], "days": [2, 2], "min_level": "severe", "closed": true},
+    {"check": "sea_lanes_closed", "days": [2, 3]},
+    {"check": "recommended_alternative"},
+    {"check": "alternative_via_cities", "cities": ["Bengaluru", "Hyderabad"]},
+    {"check": "preposition_option"},
+    {"check": "dispatch_before", "day": 2}
+  ]
+}

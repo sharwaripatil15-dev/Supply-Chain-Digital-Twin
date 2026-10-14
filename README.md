@@ -196,9 +196,26 @@ per unit-km (road 0.0026, rail 0.0011, sea 0.0008, air 0.012 kg). Extra fields a
 | POST | `/recover` | `{ events:[Event] }` | `{ strategies:[{name,cost,unmet,recovery_days,delay_avg_days,co2,resilience_after,safety_check:{passed,warning},recommended}], roi:{inaction_loss,fix_cost,net_saving}, playbook:[str], alternate_suppliers:[{replaces,supplier,name,city,spare_capacity,lead,cost_premium_pct,reliability}], alternate_routes:[{origin,destination,via,replaces,spare_capacity,extra_lead_days,extra_cost_per_unit}], inventory_actions:[{node,action,units,source,day,reason}], production_actions:[{from_factory,to_factory,units_per_day,start_day,duration,reason}] }` |
 | POST | `/parse` | `{ text }` | `{ events:[Event] }` |
 | GET | `/forecast` | `?horizon=14` | `{ horizon_days, method, mape, customers:[{id, history:[{day,demand}], forecast:[{day,mean,p10,p90}]}] }` |
-| GET | `/surrogate` | - | `{ target, mae, r2, n_train, n_test, speedup, top_features:[{feature,importance}] }` |
+| GET | `/surrogate` | - | `{ target, mae, r2, n_train, n_test, speedup, top_features:[{feature,importance}], scenario:{...models/metrics.json} }` |
+| GET | `/chaos/prescreen` | `?n=2000&top=15` | surrogate-ranked failure scenarios re-run on the exact simulator: `{ candidates, control, agreement:{spearman,precision_at_k,...}, timing:{speedup,...} }` |
+| POST | `/whatif/run` | `{ text }` or `{ events:[Event] }`, `horizon, mc_runs, robustness_runs` | `{ id, sections:[{key,title,paragraphs,bullets,evidence}], evidence, plans, recommended, confidence, narrative_source, brief_markdown }` |
+| POST | `/whatif/ask` | `{ run_id, question }` | `{ declined, tool:{name,args}, evidence, answer:[str] }` (tools: `run_scenario`, `run_strategy`, `compare_plans`) |
+| GET | `/whatif/history` | - | `{ runs:[summary], limit }`; `GET /whatif/{id}`, `GET /whatif/{id}/brief` (Markdown) |
+| POST | `/whatif/compare` | `{ ids:[2..4] }` | `{ runs, metrics:[{key,label,values}] }` |
+| POST | `/analysis/run` | `?wait=false&force=false` | `{ status:"running", progress }` or the result: `{ findings:[...], health:{score,breakdown,after_fixes}, severity_formula, sections }` |
+| GET | `/analysis/latest` | - | latest result for the current network version, `{status:"running"\|"none"}` otherwise |
+| GET | `/analysis/finding/{id}` | - | one finding: `{ id, title, type, locations, severity, confidence, evidence, why, root_cause, business, stress, fixes:[{label,cost,result}] }` |
+| GET / POST | `/expansion/candidates` | POST `{action: add\|remove\|exclude\|include\|auto\|reset, ...}` | `{ note, sites:[{id,name,lat,lon,region,cost indices,hub_quality,flood_exposure,seismic_exposure,source,excluded}] }` |
+| GET | `/expansion/baseline` | - | today's KPIs from the flow engine: `{ service_level_pct, avg_lead_days, stock_cover_days, freight_inr_per_day, co2_t_per_year, ... }` |
+| POST | `/expansion/run` | `{ goal, types, n_add, budget, max_lead_days, weather, co2, growth, redundancy, max_per_type, candidate_ids }`, `?wait=false` | `{ id, status:"running", progress }`; poll `GET /expansion/results/{id}`, cancel `POST /expansion/results/{id}/cancel`, latest `GET /expansion/latest` |
+| GET | `/expansion/results/{id}` | - | `{ plans:[{label, sites:[{name,kind,rationale,example_paths}], build_cost, annual_savings, payback_years, service/lead/CO2/resilience/health before and after, spof_removed, sensitivity}], cross_check, marginal_values, recommendation_stability }` |
+| POST | `/expansion/apply` | `{ plan_id }` | adds the plan's sites and lanes through the Manual Builder (one undoable import), bumps the network version |
 | POST | `/upload` | multipart `nodes`, `edges` (CSV), `?activate=false` | `{ network:{...as /network, resilience_score:null}, summary:{n_nodes,n_edges,by_kind}, warnings:[str], activated }` |
 | GET | `/health` | - | `{ status, mock:{network,simulate,chaos,recover,parse}, network:{source,version} }` |
+
+**Demo and synthetic networks:** `GET /network/demos` (3 ready-made demos + generator options), `GET /network/demos/{id}`
+and `POST /network/generate {archetype, industry, n_nodes, seed?}` return builder JSON that the UI loads through
+`POST /network/import?activate=true`, so they become ordinary, editable manual networks.
 
 **Network builder** ([backend/routers/network_builder.py](backend/routers/network_builder.py)). Every change bumps the
 network `version`, rebuilds the graph, clears every graph-dependent cache (API responses incl. Redis keys, chaos scans,
@@ -232,6 +249,67 @@ utilization above 90%.
 
 Errors: `422` invalid body or unknown node/edge id, `501` core function not implemented yet, `503` LLM unavailable.
 All schemas live in [backend/schemas.py](backend/schemas.py).
+
+## Browser extension
+
+[chrome-extension/](chrome-extension/README.md) (Chrome / Edge, load unpacked): select a news headline on any page,
+right-click **Ask AEGIS** and the side panel simulates its impact on your network; the panel also shows the Health
+Score, KPIs and top risks, and the toolbar badge counts urgent alerts.
+
+## Expansion planner and executive dashboard
+
+**Expansion planner** (Expansion tab, [backend/core/expansion.py](backend/core/expansion.py)). Dijkstra alone finds the
+cheapest *path*; it does not choose *locations*, so the planner works in stages:
+1. **Dijkstra stage:** a transport graph over the existing sites plus ~60 candidate cities
+   ([backend/data/candidate_sites.json](backend/data/candidate_sites.json), illustrative indices: replace with client
+   data), each linked to its 6 nearest neighbours by the best of road / rail / sea / air (freight + time value, optional
+   CO2 price and flood-exposure penalty). Dijkstra from every candidate gives cost, lead-time and CO2 matrices to every
+   customer and from every supplier and plant; cached until the network changes.
+2. **Location optimization:** a capacitated fixed-charge facility-location MILP (PuLP/CBC) picks which candidates to
+   open and which customers they serve, minimising annualised capex + opex + freight + holding + lost margin (+ CO2),
+   within budget, sites per type, a lead-time radius and optional "two sources per customer". The extra flow is bounded
+   by the upstream headroom the flow engine can actually deliver. A greedy marginal-gain heuristic cross-checks it;
+   infeasible inputs get a plain explanation.
+3. **Resilience evaluation:** each plan (Lowest cost, Best service, Most resilient) is added to a *copy* of the network;
+   the simulator, Chaos Finder and the Health Score are re-run, and savings, payback and demand +-20% sensitivity come
+   from those runs. "Add to network" applies a plan through the Manual Builder as one undoable step.
+
+**Executive dashboard.** The app opens on **Overview**: Health Score (with breakdown and trend), five KPIs with
+one-line meanings, the three findings that need attention ("Fix this" opens a prefilled what-if), recommended actions
+ranked by benefit (mark them as planned), a compact map with risk and hazard layers, the best expansion site,
+alerts and recent scenarios. **Executive / Analyst** toggle: Analyst adds evidence expanders and the analyst tools
+(Simulate, Chaos Finder, Recover). **Demo** loads an FMCG story (network, analysis, what-if, expansion) with a
+four-step tour. **Executive brief** prints a two-page A4 summary (save as PDF); tables export to CSV. Every metric has
+one definition, shown in its tooltip ([frontend/src/lib/glossary.js](frontend/src/lib/glossary.js)).
+
+## Synthetic data, ML surrogate, what-if planner and insights
+
+* **Synthetic generator** ([backend/core/synth/](backend/core/synth/), assumptions in
+  [backend/data/synth_assumptions.md](backend/data/synth_assumptions.md)): 7 archetypes x 6 industry profiles, 10-60
+  nodes in real Indian cities, mode-based lead times, 55-85% baseline utilisation, seasonality, bullwhip, and a
+  13-type disruption library (incl. weather-driven closures from the hazard impact table and correlated compound
+  events). Build the dataset with `python -m core.synth.build --n-networks 400 --cases-per-network 60 --seed 42`
+  (24,000 exact simulations, about 1.5 minutes on 12 cores; `--fast` for tests). Data card:
+  [backend/data/synth/DATA_CARD.md](backend/data/synth/DATA_CARD.md).
+* **Features** in one place: [backend/core/features.py](backend/core/features.py).
+* **Scenario surrogate** ([backend/core/risk_ml.py](backend/core/risk_ml.py), `python -m core.risk_ml --scenario`):
+  XGBoost per target (unmet %, avg delay, stock-out day, recovery days), randomized search + early stopping, monotonic
+  constraints, conformalized 80% intervals, compared against a mean predictor and a centrality heuristic on networks it
+  never saw; metrics in `backend/models/metrics.json` and `GET /surrogate`. It pre-screens Chaos Finder scenarios and
+  previews what-ifs; **every number displayed comes from the exact simulator.**
+  > **Note:** the labels come from our simulator, so the model is a fast surrogate validated on held-out synthetic
+  > networks, not a model of real-world outcomes.
+* **What-if planner** (What-if tab, [backend/core/whatif.py](backend/core/whatif.py)): plain English or the Simulate
+  scenario -> exact baseline vs scenario, Monte Carlo, cascade timeline, every recovery plan with fix-safety check and
+  Pareto flag, counterfactual attribution, sensitivity and robustness, follow-up questions through a whitelist of
+  engine tools, history/compare, Markdown/PDF brief.
+* **Insights** (Analyze on the Twin tab, [backend/core/bottleneck.py](backend/core/bottleneck.py)): capacity
+  saturation with LP shadow prices, single points of failure, supplier concentration, inventory risk, lead-time chain,
+  route fragility, regional imbalance / bullwhip and hidden failure pairs; each finding has a stress test and fixes that
+  are re-simulated, plus a 0-100 health score before and after fixes.
+* **Grounded reasoning** ([backend/core/narrative.py](backend/core/narrative.py)): explanations are rendered from an
+  evidence object; an LLM may only re-word them and is rejected if it writes a number that is not in the evidence
+  (without an API key the deterministic template is used). Every section has an Evidence expander.
 
 ## PS 04 requirements → features
 
@@ -268,8 +346,8 @@ All schemas live in [backend/schemas.py](backend/schemas.py).
 - **In-process state.** An uploaded network lives in memory until the backend restarts; there are no accounts and no
   persistence.
 - **Scaling path, not built yet:** Neo4j for graph storage and path queries on 10k+ node networks; Redis (already
-  wired as an optional cache) for shared result caching and as a job queue for Monte Carlo and Chaos Finder batches;
-  the ML surrogate to pre-screen failure pairs so only the top candidates get full simulations; PostgreSQL for
+  wired as an optional cache) for shared result caching and as a job queue for Monte Carlo and Chaos Finder batches
+  (the ML surrogate pre-screen, `GET /chaos/prescreen`, is built); PostgreSQL for
   scenario and run history. Postgres and Neo4j are commented out in `docker-compose.yml`.
 - **LLM scope.** Claude only parses scenarios and narrates the playbook. Parsed events are validated against the graph,
   and narration containing numbers the engine didn't produce is rejected.

@@ -1,3 +1,4 @@
+import { ScanSearch } from 'lucide-react'
 import { useStore } from '../store.js'
 import { fmtNum, fmtPct } from '../format.js'
 import { NODE_KINDS, isDemand, typeOf } from '../lib/nodeTypes.js'
@@ -58,7 +59,7 @@ function Overview({ network, counts, critical, unscored }) {
 
 export default function TwinPage() {
   const store = useStore()
-  const { upload, clearUpload, setTab, source } = store
+  const { upload, clearUpload, setTab, source, runAnalysis, loading } = store
   const ui = useUi()
   const previewing = upload?.network && !upload.activated
   const network = previewing ? upload.network : store.network
@@ -120,7 +121,24 @@ export default function TwinPage() {
           The active network has validation errors; simulations are off until they are fixed.
         </Notice>
       )}
-      <KpiStrip items={kpis} />
+      <div className="flex items-start gap-3">
+        <KpiStrip items={kpis} className="min-w-0 flex-1" />
+        {!previewing && (
+          <Button
+            variant="primary"
+            icon={ScanSearch}
+            className="h-auto self-stretch px-4"
+            disabled={(source && !source.runnable) || loading.analysis}
+            title="Find bottlenecks and pain points, with tested fixes"
+            onClick={() => {
+              runAnalysis()
+              setTab('insights')
+            }}
+          >
+            Analyze
+          </Button>
+        )}
+      </div>
       <Workspace className="min-h-0 flex-1" inspector={<Overview network={network} counts={counts} critical={critical} unscored={unscored} />}>
         <NetworkCanvas network={network} />
       </Workspace>

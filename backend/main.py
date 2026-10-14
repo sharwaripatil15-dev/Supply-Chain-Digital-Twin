@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from network_store import NetworkEditError, store
-from routers import chaos, forecast, network, network_builder, parse, recover, simulate, upload, weather
+from routers import analysis, chaos, expansion, forecast, network, network_builder, parse, recover, simulate, upload, weather, whatif
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("aegis")
@@ -23,12 +23,13 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=r"^chrome-extension://[a-p]{32}$",  # the AEGIS browser extension (chrome-extension/)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-for r in (network_builder, network, simulate, chaos, recover, parse, forecast, upload, weather):
+for r in (network_builder, network, simulate, chaos, recover, parse, forecast, upload, weather, whatif, analysis, expansion):
     app.include_router(r.router)
 
 

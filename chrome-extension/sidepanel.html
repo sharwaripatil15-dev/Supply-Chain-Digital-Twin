@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AEGIS</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header class="top">
+    <span class="logo" aria-hidden="true">A</span>
+    <div class="grow">
+      <h1>AEGIS</h1>
+      <p class="muted" id="network">Connecting…</p>
+    </div>
+    <button class="ghost icon" id="settings-btn" aria-label="Settings" title="Settings">⚙</button>
+  </header>
+
+  <section id="settings" class="card" hidden>
+    <h2>Settings</h2>
+    <label>AEGIS API URL <input id="api-url" type="url" /></label>
+    <label>AEGIS app URL <input id="app-url" type="url" /></label>
+    <div class="row">
+      <button class="primary" id="save-settings">Save</button>
+      <span class="muted small" id="settings-msg"></span>
+    </div>
+    <p class="muted small">Using a server other than localhost? Saving asks Chrome for permission to reach it.</p>
+  </section>
+
+  <p class="error" id="error" role="alert" hidden></p>
+
+  <section class="card" aria-labelledby="ask-title">
+    <h2 id="ask-title">Ask what if…</h2>
+    <p class="muted small">Paste a headline, or select text on any page and right-click <b>Ask AEGIS</b>.</p>
+    <textarea id="question" rows="3" maxlength="2000" placeholder="e.g. Floods shut Chennai port for 10 days"></textarea>
+    <p class="muted small" id="source"></p>
+    <button class="primary wide" id="ask-btn">Simulate impact</button>
+    <div id="answer" aria-live="polite"></div>
+  </section>
+
+  <section class="card" aria-labelledby="health-title">
+    <div class="row">
+      <h2 id="health-title" class="grow">Supply chain health</h2>
+      <button class="ghost small" id="analyze-btn">Analyze</button>
+    </div>
+    <div id="health" aria-live="polite"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section class="card" aria-labelledby="risks-title">
+    <h2 id="risks-title">What needs attention</h2>
+    <ol id="risks" class="list"><li class="muted">Loading…</li></ol>
+  </section>
+
+  <footer>
+    <button class="ghost wide" id="open-app">Open AEGIS ↗</button>
+    <p class="muted small">All figures are simulated by the AEGIS digital twin.</p>
+  </footer>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

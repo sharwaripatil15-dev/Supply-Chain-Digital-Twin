@@ -52,7 +52,7 @@ function ReplayControl() {
  * Simulate, a docked timeline. 3D is offered only with WebGL, lazy-loaded, and falls back to 2D on any error.
  * `view3d` carries 3D-only props (mode, rerouted lanes, focus targets, disruptedAll...).
  */
-export default function NetworkCanvas({ network: networkProp, statuses, utilization, disrupted, highlight, view3d = {}, allow3d = true, timeline = false, className }) {
+export default function NetworkCanvas({ network: networkProp, statuses, utilization, disrupted, highlight, view3d = {}, allow3d = true, timeline = false, className, ghost = null, onGhost = null }) {
   const store = useStore()
   const ui = useUi()
   const network = networkProp || store.network
@@ -66,6 +66,14 @@ export default function NetworkCanvas({ network: networkProp, statuses, utilizat
     for (const n of network?.nodes ?? []) c[n.kind] = (c[n.kind] || 0) + 1
     return c
   }, [network])
+  // 3D preview of an expansion plan: candidate sites join the network; the recommended ones (and their lanes) stay bright
+  const ghost3d = useMemo(() => {
+    if (!ghost || !network) return null
+    const nodes = ghost.nodes.map((n) => ({ ...n, city: n.name, capacity: 0, stock: 0, demand: 0, risk: null, top_factors: [] }))
+    const edges = (ghost.edges || []).map((e) => ({ ...e, lead: 1, cost: 0, co2: 0, capacity: e.capacity || 1 }))
+    const picked = ghost.nodes.filter((n) => n.rank).map((n) => n.id)
+    return { network: { ...network, nodes: [...network.nodes, ...nodes], edges: [...network.edges, ...edges] }, highlight: picked.length ? [...picked, ...edges.flatMap((e) => [e.source, e.target])] : highlight }
+  }, [ghost, network, highlight])
   const maxStock = useMemo(() => Math.max(0, ...(network?.nodes ?? []).filter((n) => !hidden.has(n.kind)).map((n) => n.stock || 0)), [network, hidden])
 
   const viewToggle = allow3d ? (
@@ -91,6 +99,8 @@ export default function NetworkCanvas({ network: networkProp, statuses, utilizat
         hiddenKinds={hidden}
         layout={layout}
         fitSignal={ui.fitSignal}
+        ghost={ghost}
+        onGhost={onGhost}
       />
       <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
         {viewToggle}
@@ -125,11 +135,11 @@ export default function NetworkCanvas({ network: networkProp, statuses, utilizat
           >
             <Suspense fallback={<Skeleton className="h-full w-full rounded-none" />}>
               <Network3D
-                network={network}
+                network={ghost3d ? ghost3d.network : network}
                 statuses={statuses}
                 utilization={utilization}
                 disrupted={disrupted}
-                highlight={highlight}
+                highlight={ghost3d ? ghost3d.highlight : highlight}
                 hiddenKinds={hidden}
                 leading={viewToggle}
                 {...view3d}

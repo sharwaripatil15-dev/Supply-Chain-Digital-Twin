@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Body, Query, Response
+from fastapi import APIRouter, Body, HTTPException, Query, Response
 
 import builder
+from core.synth import demos as synth_demos
+from core.synth.networks import SynthError
 from network_store import store
 from routers.deps import get_graph, preset_graph
 from schemas import (
@@ -19,10 +21,12 @@ from schemas import (
     BuilderNode,
     EdgeMutationResponse,
     ExportedNetwork,
+    GenerateNetworkRequest,
     ManualNetworkResponse,
     NetworkSourceInfo,
     NodeMutationResponse,
     SetSourceRequest,
+    SynthNetwork,
     ValidationReport,
 )
 
@@ -138,3 +142,30 @@ def import_network(network: BuilderNetwork, activate: bool = Query(False, descri
     """Replace the manual network (e.g. a file from GET /network/export). Structural problems -> 422, nothing changes."""
     store.replace_manual([n.model_dump() for n in network.nodes], [e.model_dump() for e in network.edges], activate=activate)
     return _manual()
+
+
+# ---------------------------------------------------------------- ready-made demos + random networks
+@router.get("/demos")
+def list_demos():
+    """The three demo networks plus the archetypes and industries the random generator offers."""
+    return synth_demos.options()
+
+
+@router.get("/demos/{demo_id}", response_model=SynthNetwork)
+def get_demo(demo_id: str):
+    """Builder JSON for a demo network; load it with POST /network/import?activate=true (the Manual Builder path)."""
+    if demo_id not in synth_demos.DEMOS:
+        raise HTTPException(status_code=404, detail=f"Unknown demo network {demo_id!r}.")
+    return synth_demos.demo_payload(demo_id)
+
+
+@router.post("/generate", response_model=SynthNetwork)
+def generate(req: GenerateNetworkRequest):
+    """A random synthetic network as builder JSON (nothing is stored until it is imported)."""
+    import random
+
+    seed = req.seed if req.seed is not None else random.randint(0, 2**31 - 1)
+    try:
+        return synth_demos.builder_payload(req.archetype, req.industry, req.n_nodes, seed)
+    except SynthError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

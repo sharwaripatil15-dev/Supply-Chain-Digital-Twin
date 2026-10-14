@@ -1,13 +1,13 @@
 /**
  * Presentation state only (no API calls, no business logic): rail pin, inspector visibility, flow animation,
- * timeline playback and replay, command palette, fit requests. Preferences persist per browser.
+ * timeline playback and replay, command palette, fit requests, Executive/Analyst view, demo tour. Preferences persist per browser.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from './store.js'
 
 const UiContext = createContext(null)
 const STORAGE_KEY = 'aegis-ui'
-const PERSISTED = ['railPinned', 'inspectorOpen', 'animateFlows']
+const PERSISTED = ['railPinned', 'inspectorOpen', 'animateFlows', 'view']
 export const SPEEDS = [1, 2, 4]
 const DAY_MS = 700
 
@@ -22,7 +22,7 @@ function readPrefs() {
 
 export function UiProvider({ children }) {
   const { sim, day, setDay } = useStore()
-  const [prefs, setPrefs] = useState(() => ({ railPinned: false, inspectorOpen: true, animateFlows: false, ...readPrefs() }))
+  const [prefs, setPrefs] = useState(() => ({ railPinned: false, inspectorOpen: true, animateFlows: false, view: 'executive', ...readPrefs() }))
   const [overlayOpen, setOverlayOpen] = useState(false) // inspector as an overlay drawer below 1280px
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -31,6 +31,8 @@ export function UiProvider({ children }) {
   const [story, setStory] = useState(false)
   const [fitSignal, setFitSignal] = useState(0)
   const [dataView, setDataView] = useState(null)
+  const [tourStep, setTourStep] = useState(null) // coach-mark index while the demo tour runs
+  const [demo, setDemo] = useState(null) // { step, steps, error } while demo mode loads its story
 
   useEffect(() => {
     try {
@@ -107,8 +109,13 @@ export function UiProvider({ children }) {
       requestFit: () => setFitSignal((n) => n + 1),
       dataView,
       setDataView,
+      analyst: prefs.view === 'analyst',
+      tourStep,
+      setTourStep,
+      demo,
+      setDemo,
     }),
-    [prefs, setPref, overlayOpen, paletteOpen, shortcutsOpen, playing, speed, story, fitSignal, dataView, sim, last, setDay],
+    [prefs, setPref, overlayOpen, paletteOpen, shortcutsOpen, playing, speed, story, fitSignal, dataView, sim, last, setDay, tourStep, demo],
   )
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>
 }

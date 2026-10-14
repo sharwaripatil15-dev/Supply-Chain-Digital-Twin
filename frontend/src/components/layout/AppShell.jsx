@@ -1,25 +1,32 @@
 import { useRef, useState } from 'react'
-import { Activity, CircleHelp, Database, ExternalLink, Keyboard, LifeBuoy, Moon, Network, PanelLeft, PanelRight, Radar, Search, ShieldCheck, Sun } from 'lucide-react'
+import { Activity, CircleHelp, CloudRain, Database, ExternalLink, Keyboard, LayoutDashboard, LifeBuoy, Lightbulb, MapPinPlus, Moon, Network, PanelLeft, PanelRight, Presentation, Radar, ScanSearch, Search, ShieldCheck, Sun } from 'lucide-react'
 import { SOURCE_LABEL, useStore } from '../../store.js'
 import { useTheme } from '../../theme.jsx'
 import { API_URL } from '../../api.js'
 import { eventLabel } from '../../format.js'
 import { MOD_LABEL, useHotkeys, useMediaQuery, useUi } from '../../ui.jsx'
-import { Divider, IconButton, Kbd, Menu, StatusDot, Tooltip, cn } from '../ui/index.js'
+import { Button, Divider, IconButton, Kbd, Menu, SegmentedControl, StatusDot, Tooltip, cn } from '../ui/index.js'
+import DemoMode from '../DemoMode.jsx'
 import CommandPalette from './CommandPalette.jsx'
 import ShortcutsDialog from './ShortcutsDialog.jsx'
 
+/** Navigation: seven pages for everyone, three analyst tools (shown in Analyst view, or while one is open). */
 export const PAGES = [
-  { id: 'twin', label: 'Twin', icon: Network, title: 'Digital twin', key: '1', inspector: true },
-  { id: 'simulate', label: 'Simulate', icon: Activity, title: 'Simulate', key: '2', inspector: true },
-  { id: 'chaos', label: 'Chaos Finder', icon: Radar, title: 'Chaos Finder', key: '3', inspector: true },
-  { id: 'recover', label: 'Recover', icon: LifeBuoy, title: 'Recover', key: '4', inspector: true },
-  { id: 'data', label: 'Data', icon: Database, title: 'Data', key: '5', inspector: false },
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard, title: 'Overview', purpose: 'How healthy the supply chain is and what to do next', key: '1', inspector: false, group: 'main' },
+  { id: 'twin', label: 'Network', icon: Network, title: 'Network', purpose: 'Your sites and lanes, and how critical each one is', key: '2', inspector: true, group: 'main' },
+  { id: 'whatif', label: 'What-if', icon: Lightbulb, title: 'What-if', purpose: 'Ask what happens if something goes wrong, and how to recover', key: '3', inspector: false, group: 'main' },
+  { id: 'insights', label: 'Insights', icon: ScanSearch, title: 'Insights', purpose: 'Bottlenecks and pain points, each with a tested fix', key: '4', inspector: true, group: 'main' },
+  { id: 'expansion', label: 'Expansion', icon: MapPinPlus, title: 'Expansion', purpose: 'Where to add a warehouse or plant, and what it pays back', key: '5', inspector: false, group: 'main' },
+  { id: 'weather', label: 'Weather', icon: CloudRain, title: 'Weather', purpose: 'Weather and disaster risk on your routes, with re-routing', key: '6', inspector: false, group: 'main' },
+  { id: 'data', label: 'Data', icon: Database, title: 'Data', purpose: 'Choose, upload or build the network; model accuracy', key: '7', inspector: false, group: 'main' },
+  { id: 'simulate', label: 'Simulate', icon: Activity, title: 'Simulate', purpose: 'Play a disruption day by day', key: '8', inspector: true, group: 'tools' },
+  { id: 'chaos', label: 'Chaos Finder', icon: Radar, title: 'Chaos Finder', purpose: 'Stress-test every single and paired failure', key: '9', inspector: true, group: 'tools' },
+  { id: 'recover', label: 'Recover', icon: LifeBuoy, title: 'Recover', purpose: 'Compare recovery strategies for the current scenario', key: '0', inspector: true, group: 'tools' },
 ]
 
 function Rail() {
   const { tab, setTab } = useStore()
-  const { railPinned, setPref } = useUi()
+  const { railPinned, setPref, analyst } = useUi()
   const [hover, setHover] = useState(false)
   const timer = useRef(null)
   const expanded = railPinned || hover
@@ -47,12 +54,18 @@ function Rail() {
           </span>
           <span className={cn('text-sm font-semibold tracking-wide text-fg transition-opacity duration-150', expanded ? 'visible opacity-100' : 'invisible opacity-0')}>AEGIS</span>
         </div>
-        <ul className="flex-1 space-y-0.5 p-2">
-          {PAGES.map((p) => {
+        <ul className="flex-1 space-y-0.5 overflow-y-auto p-2">
+          {PAGES.filter((p) => p.group === 'main' || analyst || p.id === tab).map((p, i, arr) => {
             const active = tab === p.id
             const Icon = p.icon
+            const firstTool = p.group === 'tools' && arr[i - 1]?.group !== 'tools'
             return (
               <li key={p.id}>
+                {firstTool && (
+                  <div className="mx-3 mb-1 mt-3 border-t border-border pt-2">
+                    <span className={cn('section-label transition-opacity duration-150', expanded ? 'opacity-100' : 'opacity-0')}>Analyst tools</span>
+                  </div>
+                )}
                 <Tooltip content={expanded ? null : p.label} shortcut={p.key} side="right" className="w-full">
                   <button
                     type="button"
@@ -109,12 +122,11 @@ function StatusButton({ label, children, onClick, title }) {
 }
 
 function TopBar() {
-  const { tab, events, sim, day, network, chaos, source, setTab } = useStore()
+  const { tab, events, sim, day, source, setTab } = useStore()
   const { theme, toggle } = useTheme()
   const ui = useUi()
   const docked = useMediaQuery('(min-width: 1280px)')
   const page = PAGES.find((p) => p.id === tab)
-  const resilience = chaos?.resilience_score ?? network?.resilience_score
   const scenario = events.length ? `${eventLabel(events[0])}${events.length > 1 ? ` +${events.length - 1}` : ''}` : 'None'
   const last = sim ? sim.timeline.length - 1 : 0
   const inspectorShown = docked ? ui.inspectorOpen : ui.overlayOpen
@@ -125,7 +137,8 @@ function TopBar() {
         <span className="text-fg-muted" aria-hidden>
           /
         </span>
-        <h1 className="truncate text-sm font-semibold text-fg">{page?.title}</h1>
+        <h1 className="shrink-0 text-sm font-semibold text-fg">{page?.title}</h1>
+        {page?.purpose && <span className="hidden truncate text-xs text-fg-muted lg:inline">· {page.purpose}</span>}
       </nav>
       <div className="ml-auto flex min-w-0 items-center gap-1">
         {source && (
@@ -139,9 +152,19 @@ function TopBar() {
           {sim && <span className="num text-fg-muted">d{day}/{last}</span>}
         </StatusButton>
         <Divider />
-        <span className="flex h-8 items-center gap-1.5 whitespace-nowrap px-2 text-xs text-fg-muted" title="Resilience score from Chaos Finder (0-100)">
-          Resilience <span className="num text-fg">{resilience != null ? resilience.toFixed(1) : '–'}</span>
-        </span>
+        <SegmentedControl
+          size="xs"
+          label="View"
+          value={ui.analyst ? 'analyst' : 'executive'}
+          onChange={(v) => ui.setPref('view', v)}
+          options={[
+            { value: 'executive', label: 'Executive', title: 'Plain-language summaries' },
+            { value: 'analyst', label: 'Analyst', title: 'Adds evidence, engine details and the analyst tools' },
+          ]}
+        />
+        <Button size="sm" variant="ghost" icon={Presentation} onClick={() => ui.setDemo({ phase: 'start' })} title="Load a demo network and walk through it">
+          Demo
+        </Button>
         <Divider />
         <button
           type="button"
@@ -223,6 +246,7 @@ export default function AppShell({ children }) {
       </div>
       <CommandPalette />
       <ShortcutsDialog />
+      <DemoMode />
     </div>
   )
 }

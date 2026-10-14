@@ -71,7 +71,7 @@ function EventEditor({ ev, network, onChange, idBase }) {
 
 /** Compact scenario builder: event list with inline edit, a "Load scenario" menu, plain-English input, one Run button. */
 export default function ScenarioBuilder({ className }) {
-  const { network, source, events, setEvents, runSimulation, parseText, loading, errors, setTab } = useStore()
+  const { network, source, events, setEvents, runSimulation, parseText, loading, errors, setTab, setWhatIfDraft } = useStore()
   const ui = useUi()
   const toast = useToast()
   const [open, setOpen] = useState(0)
@@ -179,6 +179,15 @@ export default function ScenarioBuilder({ className }) {
       <div className="space-y-2 border-t border-border p-3">
         <Button variant="primary" icon={Play} className="w-full" disabled={busy || !events.length || !runnable} onClick={() => run(events)}>
           {busy ? 'Simulating…' : 'Run simulation'}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full"
+          disabled={!events.length || !runnable}
+          onClick={() => setWhatIfDraft({ events, note: 'Planning recovery for the scenario built on the Simulate page.' })}
+        >
+          Plan recovery in What-if
         </Button>
         {!runnable && (
           <p className="text-xs text-fg-muted">

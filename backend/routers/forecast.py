@@ -21,4 +21,7 @@ def forecast(horizon: int = Query(14, ge=1, le=90)):
 def surrogate():
     # the surrogate is trained on generated networks, so its accuracy report does not depend on the active one
     compute = mock_data.surrogate if settings.mock_network else risk_ml.surrogate_report
-    return cache.get_or_compute(cache.key("surrogate", settings.mock_network), compute)
+    body = dict(cache.get_or_compute(cache.key("surrogate", settings.mock_network), compute))
+    # the scenario surrogate's held-out metrics (models/metrics.json) are a static training artifact, shown in both modes
+    body["scenario"] = risk_ml.scenario_metrics()
+    return body

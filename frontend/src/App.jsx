@@ -7,8 +7,13 @@ import SimulatePage from './pages/SimulatePage.jsx'
 import ChaosPage from './pages/ChaosPage.jsx'
 import RecoverPage from './pages/RecoverPage.jsx'
 import DataPage from './pages/DataPage.jsx'
+import WhatIfPage from './pages/WhatIfPage.jsx'
+import InsightsPage from './pages/InsightsPage.jsx'
+import ExpansionPage from './pages/ExpansionPage.jsx'
+import OverviewPage from './pages/OverviewPage.jsx'
+import WeatherPage from './pages/WeatherPage.jsx'
 
-const PAGES = { twin: TwinPage, simulate: SimulatePage, chaos: ChaosPage, recover: RecoverPage, data: DataPage }
+const PAGES = { overview: OverviewPage, weather: WeatherPage, twin: TwinPage, simulate: SimulatePage, chaos: ChaosPage, recover: RecoverPage, whatif: WhatIfPage, insights: InsightsPage, expansion: ExpansionPage, data: DataPage }
 
 /** Placeholder with the same shape as the Twin page (KPI strip + workspace). */
 function LoadingShell() {
@@ -34,7 +39,7 @@ export default function App() {
     loadNetwork()
   }, [loadNetwork])
 
-  const Page = PAGES[tab] || TwinPage
+  const Page = PAGES[tab] || OverviewPage
   return (
     <AppShell>
       {network ? (

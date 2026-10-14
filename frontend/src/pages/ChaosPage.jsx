@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Play } from 'lucide-react'
+import { Play, Sparkles } from 'lucide-react'
+import { api, errorMessage } from '../api.js'
 import { useStore } from '../store.js'
 import { fmtNum } from '../format.js'
 import { targetNodes } from '../lib/disruption.js'
@@ -77,6 +78,18 @@ export default function ChaosPage() {
   const runnable = !source || source.runnable
   const [view, setView] = useState('spof')
   const [selected, setSelected] = useState(null) // { kind, targets, key, row }
+  const [screen, setScreen] = useState({ data: null, loading: false, error: null, version: null })
+  const version = source?.version
+  const screenData = screen.version === version ? screen.data : null
+  const runScreen = async () => {
+    setScreen({ data: null, loading: true, error: null, version })
+    try {
+      setScreen({ data: await api.chaosPrescreen(2000, 15), loading: false, error: null, version })
+    } catch (err) {
+      setScreen({ data: null, loading: false, error: errorMessage(err), version })
+    }
+  }
+  const screenRows = useMemo(() => (screenData?.candidates ?? []).map((c, i) => ({ ...c, rank: i + 1, id: c.label })), [screenData])
 
   useEffect(() => {
     if (runnable && !chaos && !loading.chaos && !errors.chaos) loadChaos() // also reloads after the network changes
@@ -98,7 +111,7 @@ export default function ChaosPage() {
     return chaos ? targetNodes([...spof.map((s) => s.target), ...pairs.flatMap((p) => p.pair)]) : null
   }, [chaos, selected, spof, pairs])
   const select = (kind, row) => {
-    const targets = kind === 'pair' ? row.pair : [row.target]
+    const targets = kind === 'pair' ? row.pair : kind === 'screen' ? row.targets : [row.target]
     setSelected((cur) => (cur && cur.kind === kind && cur.row.id === row.id ? null : { kind, targets, row, key: Date.now() }))
   }
   const simulateButton = (targets) => (
@@ -138,6 +151,63 @@ export default function ChaosPage() {
     body = <InlineError className="m-4" message={errors.chaos} onRetry={loadChaos} />
   } else if (loading.chaos && !chaos) {
     body = <SkeletonRows rows={6} label="Stress-testing every site and lane" />
+  } else if (view === 'screen') {
+    const a = screenData?.agreement
+    const t = screenData?.timing
+    body = (
+      <div className="space-y-3 py-3">
+        <div className="flex items-center gap-2 px-4">
+          <Button size="sm" variant={screenData ? 'secondary' : 'primary'} icon={Sparkles} disabled={screen.loading} onClick={runScreen}>
+            {screen.loading ? 'Screening 2,000 scenarios…' : screenData ? 'Re-run pre-screen' : 'Pre-screen 2,000 scenarios'}
+          </Button>
+        </div>
+        {screen.error && <InlineError className="mx-4" message={screen.error} onRetry={runScreen} />}
+        {screen.loading && <SkeletonRows rows={5} label="Surrogate screening, then exact re-runs" />}
+        {!screenData && !screen.loading && !screen.error && (
+          <p className="px-4 text-xs text-fg-muted">
+            The ML surrogate scores thousands of random single and paired failures; the exact simulator then re-runs the worst {15} and a random control
+            sample. Outcomes shown are exact (simulated).
+          </p>
+        )}
+        {screenData?.note && !screenRows.length && <p className="px-4 text-xs text-fg-muted">{screenData.note}</p>}
+        {screenRows.length > 0 && (
+          <>
+            <dl className="mx-4 grid grid-cols-3 gap-2 rounded-md border border-border p-2 text-xs">
+              <div>
+                <dt className="text-fg-muted">Speedup</dt>
+                <dd className="num text-fg">{fmtNum(t.speedup, 1)}×</dd>
+              </div>
+              <div>
+                <dt className="text-fg-muted">Rank agreement</dt>
+                <dd className="num text-fg">ρ {a.spearman.toFixed(2)}</dd>
+              </div>
+              <div>
+                <dt className="text-fg-muted">Precision@{screenData.top_k}</dt>
+                <dd className="num text-fg">{Math.round(a.precision_at_k * 100)}%</dd>
+              </div>
+            </dl>
+            <p className="px-4 text-2xs text-fg-muted">
+              {fmtNum(screenData.n_scenarios)} scenarios in {t.surrogate_s.toFixed(2)} s (exact would take ~{fmtNum(t.exact_all_estimate_s)} s). Top picks lose{' '}
+              {a.top_mean_exact_unmet_pct.toFixed(2)}% of demand on average vs {a.control_mean_exact_unmet_pct.toFixed(2)}% for random scenarios (exact).
+            </p>
+            <DataTable
+              label="Surrogate pre-screen"
+              rows={screenRows}
+              selectedKey={selected?.kind === 'screen' ? selected.row.id : null}
+              onRowClick={(row) => select('screen', row)}
+              columnMenu={false}
+              columns={[
+                { key: 'rank', header: '#', align: 'right', mono: true, width: 'w-8', render: (row) => <span className="text-fg-muted">{row.rank}</span> },
+                { key: 'label', header: 'Scenario', render: (row) => <span className="text-xs">{row.label}</span> },
+                { key: 'pred', header: 'Predicted', align: 'right', value: (row) => row.predicted_unmet_pct.point, render: (row) => `${row.predicted_unmet_pct.point.toFixed(2)}%` },
+                { key: 'exact', header: 'Exact', align: 'right', value: (row) => row.exact.unmet_pct, render: (row) => `${row.exact.unmet_pct.toFixed(2)}%` },
+                { key: 'act', header: '', sortable: false, width: 'w-10', render: (row) => simulateButton(row.targets) },
+              ]}
+            />
+          </>
+        )}
+      </div>
+    )
   } else if (view === 'spof') {
     body = (
       <DataTable
@@ -200,12 +270,15 @@ export default function ChaosPage() {
             tabs={[
               { value: 'spof', label: 'Single points of failure', count: chaos ? spof.length : null },
               { value: 'pairs', label: 'Hidden pairs', count: chaos ? pairs.length : null },
+              { value: 'screen', label: 'ML pre-screen', count: screenData ? screenRows.length : null },
             ]}
           />
           <TabPanel idBase="chaos" value={view} className="min-h-0 flex-1 overflow-y-auto">
             {body}
           </TabPanel>
-          <p className="border-t border-border px-4 py-2 text-xs text-fg-muted">Units lost over a 10-day outage of each target.</p>
+          <p className="border-t border-border px-4 py-2 text-xs text-fg-muted">
+            {view === 'screen' ? 'Unmet % of 30-day demand; predicted by the surrogate, exact from the simulator.' : 'Units lost over a 10-day outage of each target.'}
+          </p>
         </Panel>
         <Workspace className="min-w-0 flex-1" inspector={<Selection selected={selected} onSimulate={simulate} runnable={runnable} />} inspectorLabel="Selection">
           <NetworkCanvas highlight={highlight} view3d={{ focus: selected ? targetNodes(selected.targets) : null, focusKey: selected?.key }} />

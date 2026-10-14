@@ -158,6 +158,8 @@ def _active_state(events: list[Event], day: int, baseline: Mapping[str, list[flo
         elif ev.type == "edge":
             u, v = (p.strip() for p in ev.target.split("->"))
             edge_f[(u, v)] = min(edge_f.get((u, v), 1.0), 1.0 - ev.severity)
+        elif getattr(ev, "direction", None) == "down":  # demand drop: nominal demand x (1 - severity), lowest wins
+            mult[ev.target] = min(mult.get(ev.target, 1.0), 1.0 - ev.severity)
         else:
             series = (baseline or {}).get(ev.target)
             base = series[min(day, len(series) - 1)] if series else 1.0
@@ -178,7 +180,7 @@ def lead_factors(events: list[Event], day: int) -> dict[tuple[str, str], float]:
 
 def spike_baseline(G: nx.DiGraph, events: list[Event], horizon: int) -> dict[str, list[float]] | None:
     """Forecast-based demand baseline, computed only when a scenario has a demand spike."""
-    if not any(ev.type == "demand" for ev in events):
+    if not any(ev.type == "demand" and getattr(ev, "direction", None) != "down" for ev in events):
         return None
     from core.forecast import demand_ratio  # local import: forecast -> chaos -> sim
 
@@ -187,6 +189,8 @@ def spike_baseline(G: nx.DiGraph, events: list[Event], horizon: int) -> dict[str
 
 def _describe(ev: Event) -> str:
     what = {"node": "outage at", "edge": "lane blocked:", "demand": "demand spike at"}[ev.type]
+    if ev.type == "demand" and getattr(ev, "direction", None) == "down":
+        what = "demand drop at"
     return f"{what} {ev.target} for {ev.duration}d (severity {ev.severity:.2f})"
 
 
@@ -225,6 +229,7 @@ def simulate(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30, detail: 
     backup_logged = False
     prev_status = {n: "ok" for n in G}
     total_unmet = 0.0
+    unmet_by_node = {c: 0.0 for c in customers}
 
     for ev in events:
         if ev.start < horizon:
@@ -257,6 +262,7 @@ def simulate(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30, detail: 
                 stock[n] -= draw
                 lost = short - draw
                 day_unmet += lost
+                unmet_by_node[n] += lost
                 if lost > 0:
                     status[n] = "down"
                     stockout_day.setdefault(n, day)
@@ -321,6 +327,9 @@ def simulate(G: nx.DiGraph, events: Iterable[Event], horizon: int = 30, detail: 
         "revenue_at_risk": round(total_unmet * G.graph.get("unit_price", 4200), 0),
         "delay": delay,
         "bottlenecks": find_bottlenecks(timeline),
+        # additive fields (not in SimulateResponse): per demand node unmet units, and the last day with unmet demand
+        "unmet_by_node": {c: round(v, 1) for c, v in unmet_by_node.items()},
+        "last_unmet_day": max((r["day"] for r in timeline if r["unmet"] > 0), default=None),
     }
     if detail:
         result.update(daily_flows=daily_flows, daily_cost=daily_cost)

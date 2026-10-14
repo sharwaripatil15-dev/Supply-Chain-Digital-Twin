@@ -16,6 +16,7 @@ export const api = {
   parse: (text) => data(client.post('/parse', { text })),
   forecast: (horizon = 14) => data(client.get('/forecast', { params: { horizon } })),
   surrogate: () => data(client.get('/surrogate')),
+  chaosPrescreen: (n = 2000, top = 15) => data(client.get('/chaos/prescreen', { params: { n, top }, timeout: 120000 })),
   upload: (nodesFile, edgesFile, activate = false) => {
     const form = new FormData()
     form.append('nodes', nodesFile)
@@ -38,6 +39,27 @@ export const api = {
   exportNetwork: (scope = 'manual') => data(client.get('/network/export', { params: { scope } })),
   exportCsv: (file, scope = 'manual') => data(client.get('/network/export/csv', { params: { file, scope }, responseType: 'text' })),
   importNetwork: (network, activate = false) => data(client.post('/network/import', network, { params: { activate } })),
+  networkDemos: () => data(client.get('/network/demos')),
+  networkDemo: (id) => data(client.get(`/network/demos/${enc(id)}`)),
+  generateNetwork: (body) => data(client.post('/network/generate', body)),
+
+  // ------------------------------------------------ what-if planner + supply chain analysis (long-running: 3 min)
+  whatifRun: (body) => data(client.post('/whatif/run', body, { timeout: 180000 })),
+  whatifAsk: (runId, question) => data(client.post('/whatif/ask', { run_id: runId, question }, { timeout: 180000 })),
+  whatifHistory: () => data(client.get('/whatif/history')),
+  whatifGet: (id) => data(client.get(`/whatif/${enc(id)}`)),
+  whatifCompare: (ids) => data(client.post('/whatif/compare', { ids })),
+  expansionCandidates: () => data(client.get('/expansion/candidates')),
+  expansionEditCandidates: (body) => data(client.post('/expansion/candidates', body, { timeout: 120000 })),
+  expansionBaseline: () => data(client.get('/expansion/baseline')),
+  expansionRun: (body) => data(client.post('/expansion/run', body)),
+  expansionResult: (id) => data(client.get(`/expansion/results/${enc(id)}`)),
+  expansionCancel: (id) => data(client.post(`/expansion/results/${enc(id)}/cancel`)),
+  expansionLatest: () => data(client.get('/expansion/latest')),
+  expansionApply: (planId) => data(client.post('/expansion/apply', { plan_id: planId })),
+  analysisRun: () => data(client.post('/analysis/run', null, { timeout: 180000 })),
+  analysisLatest: () => data(client.get('/analysis/latest')),
+  analysisFinding: (id) => data(client.get(`/analysis/finding/${enc(id)}`)),
 
   // ------------------------------------------------ weather- and hazard-aware routing
   weatherRisk: (horizon = 7, refresh = false) => data(client.get('/weather/risk', { params: { horizon, refresh } })),

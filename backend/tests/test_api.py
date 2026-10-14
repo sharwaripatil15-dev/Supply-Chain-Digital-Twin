@@ -128,3 +128,11 @@ def test_live_mode_stubs_return_501(monkeypatch):
     r = client.get("/forecast", params={"horizon": 3})
     assert r.status_code == 501
     assert "NotImplemented" in r.text or "Not implemented" in r.text
+
+
+def test_cors_allows_the_browser_extension_only():
+    ext = "chrome-extension://" + "a" * 32
+    r = client.get("/health", headers={"Origin": ext})
+    assert r.headers.get("access-control-allow-origin") == ext
+    r = client.get("/health", headers={"Origin": "https://evil.example.com"})
+    assert "access-control-allow-origin" not in r.headers

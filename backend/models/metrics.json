@@ -1,0 +1,820 @@
+{
+ "version": 1,
+ "mode": "full",
+ "artifact": "scenario_surrogate_v1.joblib",
+ "created": "2026-10-14T04:56:53",
+ "dataset": {
+  "rows": 24000,
+  "networks": 400,
+  "train_networks": 240,
+  "val_networks": 40,
+  "calib_networks": 40,
+  "test_networks": 80,
+  "train_rows": 14400,
+  "val_rows": 2400,
+  "calib_rows": 2400,
+  "test_rows": 4800
+ },
+ "targets": {
+  "unmet_pct": {
+   "label": "unmet demand",
+   "unit": "% of demand",
+   "best_params": {
+    "max_depth": 8,
+    "learning_rate": 0.08,
+    "min_child_weight": 3,
+    "subsample": 1.0,
+    "colsample_bytree": 0.75,
+    "reg_lambda": 1.0
+   },
+   "best_iteration": 270,
+   "val_mae": 0.2448,
+   "model": {
+    "mae": 0.2325,
+    "rmse": 0.8944,
+    "r2": 0.8366,
+    "spearman": 0.6159,
+    "top10_recall": 0.898,
+    "interval_coverage": 0.8646,
+    "interval_width": 0.4881
+   },
+   "baseline_mean": {
+    "mae": 0.8933,
+    "rmse": 2.2138,
+    "r2": -0.0012,
+    "spearman": 0.0,
+    "top10_recall": 0.589
+   },
+   "baseline_centrality": {
+    "mae": 0.7052,
+    "rmse": 2.0097,
+    "r2": 0.1749,
+    "spearman": 0.432,
+    "top10_recall": 0.794
+   },
+   "residuals": {
+    "mean": -0.0164,
+    "std": 0.8943,
+    "p5": -0.5541,
+    "p50": 0.0008,
+    "p95": 0.502
+   },
+   "by_archetype": {
+    "backup_supplier": {
+     "mae": 0.1464,
+     "mae_mean_baseline": 0.5963,
+     "n": 360
+    },
+    "concentrated": {
+     "mae": 0.3382,
+     "mae_mean_baseline": 1.0859,
+     "n": 420
+    },
+    "hub_spoke": {
+     "mae": 0.332,
+     "mae_mean_baseline": 1.1911,
+     "n": 900
+    },
+    "linear": {
+     "mae": 0.2239,
+     "mae_mean_baseline": 0.7597,
+     "n": 660
+    },
+    "long_tail": {
+     "mae": 0.1749,
+     "mae_mean_baseline": 0.8229,
+     "n": 1080
+    },
+    "multi_source": {
+     "mae": 0.1928,
+     "mae_mean_baseline": 0.8704,
+     "n": 780
+    },
+    "two_region_port": {
+     "mae": 0.2254,
+     "mae_mean_baseline": 0.7931,
+     "n": 600
+    }
+   },
+   "by_disruption": {
+    "compound": {
+     "mae": 0.8692,
+     "mae_mean_baseline": 1.2415,
+     "n": 360
+    },
+    "demand_drop": {
+     "mae": 0.0041,
+     "mae_mean_baseline": 0.5617,
+     "n": 387
+    },
+    "demand_spike": {
+     "mae": 0.0657,
+     "mae_mean_baseline": 0.5707,
+     "n": 390
+    },
+    "factory_breakdown": {
+     "mae": 0.3324,
+     "mae_mean_baseline": 1.2028,
+     "n": 348
+    },
+    "lead_time_inflation": {
+     "mae": 0.0084,
+     "mae_mean_baseline": 0.5617,
+     "n": 376
+    },
+    "port_closure": {
+     "mae": 0.2384,
+     "mae_mean_baseline": 0.9001,
+     "n": 355
+    },
+    "quality_recall": {
+     "mae": 0.3656,
+     "mae_mean_baseline": 1.3056,
+     "n": 381
+    },
+    "route_blockage": {
+     "mae": 0.0651,
+     "mae_mean_baseline": 0.6108,
+     "n": 364
+    },
+    "strike": {
+     "mae": 0.1999,
+     "mae_mean_baseline": 0.7692,
+     "n": 373
+    },
+    "supplier_outage": {
+     "mae": 0.351,
+     "mae_mean_baseline": 1.4262,
+     "n": 392
+    },
+    "supplier_partial": {
+     "mae": 0.2055,
+     "mae_mean_baseline": 0.7918,
+     "n": 370
+    },
+    "warehouse_shutdown": {
+     "mae": 0.165,
+     "mae_mean_baseline": 0.9916,
+     "n": 346
+    },
+    "weather_closure": {
+     "mae": 0.1788,
+     "mae_mean_baseline": 0.6973,
+     "n": 358
+    }
+   },
+   "top_features": [
+    {
+     "feature": "loss_max",
+     "importance": 0.2377
+    },
+    {
+     "feature": "cover_over_duration",
+     "importance": 0.0898
+    },
+    {
+     "feature": "ind_agri",
+     "importance": 0.0759
+    },
+    {
+     "feature": "duration",
+     "importance": 0.0684
+    },
+    {
+     "feature": "lead_mult_max",
+     "importance": 0.0486
+    },
+    {
+     "feature": "loss_sum",
+     "importance": 0.0409
+    },
+    {
+     "feature": "cover_minus_duration",
+     "importance": 0.0351
+    },
+    {
+     "feature": "mean_cover_days",
+     "importance": 0.0332
+    },
+    {
+     "feature": "target_headroom_min",
+     "importance": 0.0268
+    },
+    {
+     "feature": "severity_mean",
+     "importance": 0.0267
+    }
+   ],
+   "monotone": {
+    "severity_max": 1,
+    "duration": 1,
+    "capacity_lost_share": 1,
+    "loss_max": 1,
+    "downstream_cover_min": -1
+   }
+  },
+  "avg_delay": {
+   "label": "average extra delay",
+   "unit": "days",
+   "best_params": {
+    "max_depth": 8,
+    "learning_rate": 0.05,
+    "min_child_weight": 1,
+    "subsample": 0.8,
+    "colsample_bytree": 1.0,
+    "reg_lambda": 0.5
+   },
+   "best_iteration": 127,
+   "val_mae": 0.0876,
+   "model": {
+    "mae": 0.1024,
+    "rmse": 0.2605,
+    "r2": 0.7517,
+    "spearman": 0.7434,
+    "top10_recall": 0.724,
+    "interval_coverage": 0.8173,
+    "interval_width": 0.2178
+   },
+   "baseline_mean": {
+    "mae": 0.2511,
+    "rmse": 0.5228,
+    "r2": -0.0,
+    "spearman": 0.0,
+    "top10_recall": 0.158
+   },
+   "baseline_centrality": {
+    "mae": 0.2419,
+    "rmse": 0.5175,
+    "r2": 0.0202,
+    "spearman": 0.2363,
+    "top10_recall": 0.278
+   },
+   "residuals": {
+    "mean": -0.0019,
+    "std": 0.2605,
+    "p5": -0.2721,
+    "p50": 0.0091,
+    "p95": 0.2328
+   },
+   "by_archetype": {
+    "backup_supplier": {
+     "mae": 0.1314,
+     "mae_mean_baseline": 0.2625,
+     "n": 360
+    },
+    "concentrated": {
+     "mae": 0.1079,
+     "mae_mean_baseline": 0.235,
+     "n": 420
+    },
+    "hub_spoke": {
+     "mae": 0.1321,
+     "mae_mean_baseline": 0.2977,
+     "n": 900
+    },
+    "linear": {
+     "mae": 0.0476,
+     "mae_mean_baseline": 0.217,
+     "n": 660
+    },
+    "long_tail": {
+     "mae": 0.0575,
+     "mae_mean_baseline": 0.2013,
+     "n": 1080
+    },
+    "multi_source": {
+     "mae": 0.0949,
+     "mae_mean_baseline": 0.2135,
+     "n": 780
+    },
+    "two_region_port": {
+     "mae": 0.1872,
+     "mae_mean_baseline": 0.3617,
+     "n": 600
+    }
+   },
+   "by_disruption": {
+    "compound": {
+     "mae": 0.1949,
+     "mae_mean_baseline": 0.283,
+     "n": 360
+    },
+    "demand_drop": {
+     "mae": 0.0162,
+     "mae_mean_baseline": 0.1871,
+     "n": 387
+    },
+    "demand_spike": {
+     "mae": 0.0345,
+     "mae_mean_baseline": 0.1555,
+     "n": 390
+    },
+    "factory_breakdown": {
+     "mae": 0.11,
+     "mae_mean_baseline": 0.194,
+     "n": 348
+    },
+    "lead_time_inflation": {
+     "mae": 0.1193,
+     "mae_mean_baseline": 0.3098,
+     "n": 376
+    },
+    "port_closure": {
+     "mae": 0.087,
+     "mae_mean_baseline": 0.1789,
+     "n": 355
+    },
+    "quality_recall": {
+     "mae": 0.0615,
+     "mae_mean_baseline": 0.1571,
+     "n": 381
+    },
+    "route_blockage": {
+     "mae": 0.0647,
+     "mae_mean_baseline": 0.2039,
+     "n": 364
+    },
+    "strike": {
+     "mae": 0.0847,
+     "mae_mean_baseline": 0.177,
+     "n": 373
+    },
+    "supplier_outage": {
+     "mae": 0.1104,
+     "mae_mean_baseline": 0.1792,
+     "n": 392
+    },
+    "supplier_partial": {
+     "mae": 0.0497,
+     "mae_mean_baseline": 0.1641,
+     "n": 370
+    },
+    "warehouse_shutdown": {
+     "mae": 0.0675,
+     "mae_mean_baseline": 0.2055,
+     "n": 346
+    },
+    "weather_closure": {
+     "mae": 0.3461,
+     "mae_mean_baseline": 0.8957,
+     "n": 358
+    }
+   },
+   "top_features": [
+    {
+     "feature": "lead_inflation_share",
+     "importance": 0.2758
+    },
+    {
+     "feature": "dt_compound",
+     "importance": 0.0863
+    },
+    {
+     "feature": "mean_lead",
+     "importance": 0.0548
+    },
+    {
+     "feature": "n_node_targets",
+     "importance": 0.0319
+    },
+    {
+     "feature": "ind_pharma",
+     "importance": 0.0304
+    },
+    {
+     "feature": "severity_mean",
+     "importance": 0.0242
+    },
+    {
+     "feature": "n_regions",
+     "importance": 0.0193
+    },
+    {
+     "feature": "supplier_hhi",
+     "importance": 0.0191
+    },
+    {
+     "feature": "extra_lead_alt_max",
+     "importance": 0.0191
+    },
+    {
+     "feature": "ind_apparel",
+     "importance": 0.0175
+    }
+   ],
+   "monotone": {}
+  },
+  "stockout_day": {
+   "label": "first stock-out day",
+   "unit": "day",
+   "best_params": {
+    "max_depth": 8,
+    "learning_rate": 0.08,
+    "min_child_weight": 3,
+    "subsample": 1.0,
+    "colsample_bytree": 0.75,
+    "reg_lambda": 1.0
+   },
+   "best_iteration": 72,
+   "val_mae": 1.6181,
+   "model": {
+    "mae": 1.6751,
+    "rmse": 3.8052,
+    "r2": 0.743,
+    "spearman": 0.6445,
+    "top10_recall": 0.866,
+    "interval_coverage": 0.8617,
+    "interval_width": 4.9243
+   },
+   "baseline_mean": {
+    "mae": 5.5925,
+    "rmse": 7.5085,
+    "r2": -0.0005,
+    "spearman": 0.0,
+    "top10_recall": 0.591
+   },
+   "baseline_centrality": {
+    "mae": 4.8437,
+    "rmse": 7.0054,
+    "r2": 0.1291,
+    "spearman": 0.4061,
+    "top10_recall": 0.729
+   },
+   "residuals": {
+    "mean": -0.1661,
+    "std": 3.8016,
+    "p5": -6.3965,
+    "p50": -0.0072,
+    "p95": 5.9838
+   },
+   "by_archetype": {
+    "backup_supplier": {
+     "mae": 1.6427,
+     "mae_mean_baseline": 4.8945,
+     "n": 360
+    },
+    "concentrated": {
+     "mae": 2.1612,
+     "mae_mean_baseline": 6.7933,
+     "n": 420
+    },
+    "hub_spoke": {
+     "mae": 1.785,
+     "mae_mean_baseline": 6.6607,
+     "n": 900
+    },
+    "linear": {
+     "mae": 2.1766,
+     "mae_mean_baseline": 6.0628,
+     "n": 660
+    },
+    "long_tail": {
+     "mae": 1.2414,
+     "mae_mean_baseline": 5.1656,
+     "n": 1080
+    },
+    "multi_source": {
+     "mae": 1.5751,
+     "mae_mean_baseline": 4.7499,
+     "n": 780
+    },
+    "two_region_port": {
+     "mae": 1.5482,
+     "mae_mean_baseline": 4.915,
+     "n": 600
+    }
+   },
+   "by_disruption": {
+    "compound": {
+     "mae": 4.5537,
+     "mae_mean_baseline": 8.1649,
+     "n": 360
+    },
+    "demand_drop": {
+     "mae": 0.0281,
+     "mae_mean_baseline": 3.4819,
+     "n": 387
+    },
+    "demand_spike": {
+     "mae": 1.0716,
+     "mae_mean_baseline": 4.0196,
+     "n": 390
+    },
+    "factory_breakdown": {
+     "mae": 2.6083,
+     "mae_mean_baseline": 7.3007,
+     "n": 348
+    },
+    "lead_time_inflation": {
+     "mae": 0.0646,
+     "mae_mean_baseline": 3.4819,
+     "n": 376
+    },
+    "port_closure": {
+     "mae": 1.9687,
+     "mae_mean_baseline": 6.9486,
+     "n": 355
+    },
+    "quality_recall": {
+     "mae": 1.9233,
+     "mae_mean_baseline": 5.3657,
+     "n": 381
+    },
+    "route_blockage": {
+     "mae": 1.02,
+     "mae_mean_baseline": 4.9832,
+     "n": 364
+    },
+    "strike": {
+     "mae": 2.7529,
+     "mae_mean_baseline": 6.3234,
+     "n": 373
+    },
+    "supplier_outage": {
+     "mae": 1.1711,
+     "mae_mean_baseline": 6.0865,
+     "n": 392
+    },
+    "supplier_partial": {
+     "mae": 1.3787,
+     "mae_mean_baseline": 4.475,
+     "n": 370
+    },
+    "warehouse_shutdown": {
+     "mae": 1.4814,
+     "mae_mean_baseline": 6.696,
+     "n": 346
+    },
+    "weather_closure": {
+     "mae": 2.0358,
+     "mae_mean_baseline": 5.8594,
+     "n": 358
+    }
+   },
+   "top_features": [
+    {
+     "feature": "loss_max",
+     "importance": 0.166
+    },
+    {
+     "feature": "articulation_any",
+     "importance": 0.0746
+    },
+    {
+     "feature": "cover_over_duration",
+     "importance": 0.0719
+    },
+    {
+     "feature": "mean_cover_days",
+     "importance": 0.0525
+    },
+    {
+     "feature": "loss_sum",
+     "importance": 0.0422
+    },
+    {
+     "feature": "downstream_cover_min",
+     "importance": 0.0383
+    },
+    {
+     "feature": "duration",
+     "importance": 0.0346
+    },
+    {
+     "feature": "severity_max",
+     "importance": 0.029
+    },
+    {
+     "feature": "severity_mean",
+     "importance": 0.0277
+    },
+    {
+     "feature": "extra_lead_alt_max",
+     "importance": 0.0264
+    }
+   ],
+   "monotone": {
+    "severity_max": -1,
+    "duration": -1,
+    "capacity_lost_share": -1,
+    "loss_max": -1,
+    "downstream_cover_min": 1
+   }
+  },
+  "recovery_days": {
+   "label": "recovery time",
+   "unit": "days",
+   "best_params": {
+    "max_depth": 8,
+    "learning_rate": 0.05,
+    "min_child_weight": 1,
+    "subsample": 0.8,
+    "colsample_bytree": 1.0,
+    "reg_lambda": 0.5
+   },
+   "best_iteration": 139,
+   "val_mae": 1.084,
+   "model": {
+    "mae": 1.0654,
+    "rmse": 2.6669,
+    "r2": 0.7371,
+    "spearman": 0.6375,
+    "top10_recall": 0.923,
+    "interval_coverage": 0.8392,
+    "interval_width": 2.9872
+   },
+   "baseline_mean": {
+    "mae": 3.516,
+    "rmse": 5.202,
+    "r2": -0.0001,
+    "spearman": 0.0,
+    "top10_recall": 0.596
+   },
+   "baseline_centrality": {
+    "mae": 2.898,
+    "rmse": 4.6998,
+    "r2": 0.1837,
+    "spearman": 0.4169,
+    "top10_recall": 0.806
+   },
+   "residuals": {
+    "mean": 0.0935,
+    "std": 2.6652,
+    "p5": -3.538,
+    "p50": 0.0046,
+    "p95": 3.8965
+   },
+   "by_archetype": {
+    "backup_supplier": {
+     "mae": 1.1282,
+     "mae_mean_baseline": 3.0524,
+     "n": 360
+    },
+    "concentrated": {
+     "mae": 1.0585,
+     "mae_mean_baseline": 3.8473,
+     "n": 420
+    },
+    "hub_spoke": {
+     "mae": 1.1742,
+     "mae_mean_baseline": 4.088,
+     "n": 900
+    },
+    "linear": {
+     "mae": 1.373,
+     "mae_mean_baseline": 4.1224,
+     "n": 660
+    },
+    "long_tail": {
+     "mae": 0.8735,
+     "mae_mean_baseline": 3.1628,
+     "n": 1080
+    },
+    "multi_source": {
+     "mae": 0.9677,
+     "mae_mean_baseline": 3.0313,
+     "n": 780
+    },
+    "two_region_port": {
+     "mae": 1.0036,
+     "mae_mean_baseline": 3.3033,
+     "n": 600
+    }
+   },
+   "by_disruption": {
+    "compound": {
+     "mae": 3.5912,
+     "mae_mean_baseline": 5.2561,
+     "n": 360
+    },
+    "demand_drop": {
+     "mae": 0.0191,
+     "mae_mean_baseline": 2.1613,
+     "n": 387
+    },
+    "demand_spike": {
+     "mae": 0.9957,
+     "mae_mean_baseline": 2.6935,
+     "n": 390
+    },
+    "factory_breakdown": {
+     "mae": 1.3617,
+     "mae_mean_baseline": 4.4913,
+     "n": 348
+    },
+    "lead_time_inflation": {
+     "mae": 0.0537,
+     "mae_mean_baseline": 2.1613,
+     "n": 376
+    },
+    "port_closure": {
+     "mae": 0.9425,
+     "mae_mean_baseline": 3.8461,
+     "n": 355
+    },
+    "quality_recall": {
+     "mae": 2.0184,
+     "mae_mean_baseline": 5.1512,
+     "n": 381
+    },
+    "route_blockage": {
+     "mae": 0.4752,
+     "mae_mean_baseline": 2.6662,
+     "n": 364
+    },
+    "strike": {
+     "mae": 1.09,
+     "mae_mean_baseline": 3.2074,
+     "n": 373
+    },
+    "supplier_outage": {
+     "mae": 0.8649,
+     "mae_mean_baseline": 4.4408,
+     "n": 392
+    },
+    "supplier_partial": {
+     "mae": 1.2816,
+     "mae_mean_baseline": 3.6985,
+     "n": 370
+    },
+    "warehouse_shutdown": {
+     "mae": 0.5962,
+     "mae_mean_baseline": 3.348,
+     "n": 346
+    },
+    "weather_closure": {
+     "mae": 0.639,
+     "mae_mean_baseline": 2.6808,
+     "n": 358
+    }
+   },
+   "top_features": [
+    {
+     "feature": "loss_max",
+     "importance": 0.1637
+    },
+    {
+     "feature": "cover_minus_duration",
+     "importance": 0.0672
+    },
+    {
+     "feature": "cover_over_duration",
+     "importance": 0.0615
+    },
+    {
+     "feature": "ind_apparel",
+     "importance": 0.0376
+    },
+    {
+     "feature": "dt_compound",
+     "importance": 0.0369
+    },
+    {
+     "feature": "demand_up_share",
+     "importance": 0.0336
+    },
+    {
+     "feature": "ind_pharma",
+     "importance": 0.0322
+    },
+    {
+     "feature": "severity_mean",
+     "importance": 0.0313
+    },
+    {
+     "feature": "articulation_any",
+     "importance": 0.0285
+    },
+    {
+     "feature": "loss_sum",
+     "importance": 0.0266
+    }
+   ],
+   "monotone": {
+    "severity_max": 1,
+    "duration": 1,
+    "capacity_lost_share": 1,
+    "loss_max": 1,
+    "downstream_cover_min": -1
+   }
+  }
+ },
+ "interval": {
+  "level": 0.8,
+  "method": "conformalized quantile regression (XGBoost P10/P90 + calibration networks)",
+  "qhat": {
+   "unmet_pct": 0.0013,
+   "avg_delay": 0.0129,
+   "stockout_day": 0.0017,
+   "recovery_days": 0.0029
+  }
+ },
+ "timing": {
+  "inference_ms_per_scenario_batch": 0.2198,
+  "inference_ms_single": 28.667,
+  "features_ms_per_scenario": 0.25,
+  "exact_sim_ms_per_scenario": 26.16,
+  "speedup_batch": 55.7
+ },
+ "note": "Labels come from the AEGIS simulator, so this is a fast surrogate validated on held-out synthetic networks, not on real-world outcomes."
+}

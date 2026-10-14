@@ -55,14 +55,21 @@ export default function CommandPalette() {
         store.selectNode(n.id)
       },
     }))
+    const findings = (store.analysis?.status === 'ok' ? store.analysis.findings : []).map((f) => ({
+      id: `finding-${f.id}`, group: 'Findings', label: f.title, detail: `${f.severity_level} · ${f.type_label}`,
+      run: () => {
+        store.selectFinding(f.id)
+        store.setTab('insights')
+      },
+    }))
     const actions = [
       { id: 'act-theme', group: 'Actions', label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', run: toggle },
       { id: 'act-builder', group: 'Actions', label: 'Open the network builder', run: () => (ui.setDataView('manual'), store.setTab('data')) },
       { id: 'act-keys', group: 'Actions', label: 'Keyboard shortcuts', hint: '?', run: () => ui.setShortcutsOpen(true) },
     ]
-    const all = [...pages, ...scenarios, ...nodes, ...actions]
+    const all = [...pages, ...findings, ...scenarios, ...nodes, ...actions]
     const q = norm(query).trim()
-    if (!q) return all.filter((x) => x.group !== 'Nodes').concat(nodes.slice(0, 6))
+    if (!q) return all.filter((x) => x.group !== 'Nodes' && x.group !== 'Findings').concat(findings.slice(0, 3), nodes.slice(0, 6))
     return all
       .map((x) => {
         const hay = `${norm(x.label)} ${norm(x.detail)}`

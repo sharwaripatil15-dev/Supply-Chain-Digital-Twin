@@ -1,4 +1,13 @@
-"""Node criticality model (an ML surrogate of the flow engine) with SHAP explanations. Owner: D.
+"""ML surrogates of the engine, with SHAP explanations. Owner: D.
+
+Two models live here:
+  1. Node criticality (below, unchanged): share of demand lost if one node fails, used for node "risk" in GET /network.
+  2. Scenario surrogate (section 2 further down): predicts the outcomes of a whole disruption scenario (unmet %,
+     avg delay, stock-out day, recovery days) with 80% intervals, trained on the synthetic dataset (core.synth.build)
+     labelled by the exact simulator. It pre-screens scenarios (Chaos Finder, what-if preview); the exact simulator
+     stays the source of truth for every number the UI displays.
+
+--- 1. Node criticality ---
 
 Training data: networks from core.graph.build_network(seed) for seeds 0..200. For every supplier, factory and
 warehouse (demand nodes are excluded: a failed retailer/customer loses its own demand plus whatever it forwards, so
@@ -19,6 +28,7 @@ Pre-train with:  python -m core.risk_ml
 """
 from __future__ import annotations
 
+import json
 import threading
 import time
 from pathlib import Path
@@ -250,7 +260,388 @@ def _score(G: nx.DiGraph, top_k: int) -> dict[str, dict]:
     return out
 
 
+# ================================================================ 2. scenario surrogate
+"""Scenario surrogate (multi-output gradient boosting).
+
+Data      data/synth/dataset.parquet (core.synth.build): one row per (network, disruption), labels from core.sim.simulate,
+          features core.features.SCENARIO_FEATURES. Splits are by network: train 60% / val 10% / calib 10% / test 20%.
+Targets   unmet_pct (% of horizon demand), avg_delay (days), stockout_day (day of first stock-out, 30 = none),
+          recovery_days (days from disruption start to the last day with unmet demand).
+Model     one XGBoost regressor per target (squared error), hyper-parameters by randomized search (N_ITER draws scored
+          on the validation networks) with early stopping on the same networks, monotonic constraints where the
+          physics is one-directional (MONOTONE: more severity / duration / lost capacity never helps; more stock
+          cover never hurts). Intervals: conformalized quantile regression - an XGBoost multi-quantile model
+          (P10/P50/P90) is widened by the calibration-network conformity score so the 80% band has finite-sample
+          coverage; empirical coverage on the test networks is reported.
+Baselines mean predictor (train mean) and a centrality heuristic: y ~ a + b * h with h = (betweenness_max + pagerank_max)
+          x severity_max x duration / horizon, fitted on train. Metrics on held-out networks: MAE, RMSE, R2, Spearman,
+          top-10 recall (per test network, share of the model's 10 worst-ranked scenarios that are truly among the
+          worst 10; ties at the 10th value count as hits), interval coverage and width, residuals, per-archetype and
+          per-disruption MAE, inference time and speedup vs the exact simulator.
+Artifacts models/scenario_surrogate_v{SCENARIO_MODEL_VERSION}.joblib + models/metrics.json. If missing, a fast model
+          is trained automatically (core.synth.build --fast data); if that fails every caller degrades gracefully.
+Train     python -m core.risk_ml --scenario          (needs data/synth/dataset.parquet; --fast for the small set)
+Optional stretch (not in the default requirements): a GNN over the network graph could replace the hand-built
+          graph features; it is deliberately not implemented here.
+"""
+SCENARIO_MODEL_VERSION = 1
+SCENARIO_TARGETS = ["unmet_pct", "avg_delay", "stockout_day", "recovery_days"]
+METRICS_PATH = MODEL_PATH.parent / "metrics.json"
+HORIZON = 30
+TARGET_INFO = {  # label, unit, higher is worse, valid range
+    "unmet_pct": ("unmet demand", "% of demand", True, (0.0, 100.0)),
+    "avg_delay": ("average extra delay", "days", True, (0.0, 60.0)),
+    "stockout_day": ("first stock-out day", "day", False, (0.0, float(HORIZON))),
+    "recovery_days": ("recovery time", "days", True, (0.0, float(HORIZON))),
+}
+_WORSE = {"severity_max": 1, "duration": 1, "capacity_lost_share": 1, "loss_max": 1, "downstream_cover_min": -1}
+MONOTONE = {
+    "unmet_pct": _WORSE,
+    "recovery_days": _WORSE,
+    "stockout_day": {k: -v for k, v in _WORSE.items()},
+    "avg_delay": {},
+}
+N_ITER = {"full": 12, "fast": 3}
+PARAM_SPACE = {
+    "max_depth": [3, 4, 5, 6, 7, 8], "learning_rate": [0.03, 0.05, 0.08, 0.12], "min_child_weight": [1, 3, 5, 10],
+    "subsample": [0.7, 0.8, 0.9, 1.0], "colsample_bytree": [0.6, 0.75, 0.9, 1.0], "reg_lambda": [0.5, 1.0, 2.0, 5.0],
+}
+INTERVAL = 0.8
+
+_scenario_lock = threading.Lock()
+_scenario_bundle: dict | None = None
+_scenario_error: str | None = None
+
+
+def scenario_model_path(version: int = SCENARIO_MODEL_VERSION) -> Path:
+    return MODEL_PATH.parent / f"scenario_surrogate_v{version}.joblib"
+
+
+def centrality_heuristic(X: pd.DataFrame) -> np.ndarray:
+    return ((X["betweenness_max"] + X["pagerank_max"]) * X["severity_max"] * X["duration"] / HORIZON).to_numpy()
+
+
+def _spearman(a, b) -> float:
+    from scipy.stats import spearmanr
+
+    if np.ptp(a) == 0 or np.ptp(b) == 0:
+        return 0.0
+    return float(spearmanr(a, b).statistic)
+
+
+def _top_recall(df: pd.DataFrame, y: np.ndarray, pred: np.ndarray, worse_high: bool, k: int = 10) -> float:
+    """Mean over networks of: share of the model's top-k (worst) scenarios that are truly in the worst k (tie-aware)."""
+    sign = 1 if worse_high else -1
+    out = []
+    for _, idx in df.groupby("network_id").indices.items():
+        if len(idx) < 2 * k:
+            continue
+        yt, yp = sign * y[idx], sign * pred[idx]
+        cutoff = np.sort(yt)[-k]
+        out.append(float(np.mean(yt[np.argsort(-yp, kind="stable")[:k]] >= cutoff)))
+    return round(float(np.mean(out)), 3) if out else 0.0
+
+
+def _metrics(df: pd.DataFrame, y: np.ndarray, pred: np.ndarray, worse_high: bool) -> dict:
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+    return {
+        "mae": round(float(mean_absolute_error(y, pred)), 4),
+        "rmse": round(float(np.sqrt(mean_squared_error(y, pred))), 4),
+        "r2": round(float(r2_score(y, pred)), 4),
+        "spearman": round(_spearman(y, pred), 4),
+        "top10_recall": _top_recall(df, y, pred, worse_high),
+    }
+
+
+def _xgb(params: dict, target: str, n_estimators: int, seed: int, quantile: bool = False):
+    from xgboost import XGBRegressor
+
+    extra = {"objective": "reg:quantileerror", "quantile_alpha": np.array([0.1, 0.5, 0.9])} if quantile else {}
+    return XGBRegressor(n_estimators=n_estimators, early_stopping_rounds=50, tree_method="hist", random_state=seed,
+                        n_jobs=4, monotone_constraints=MONOTONE[target] or None, **params, **extra)
+
+
+def train_scenario_surrogate(df: pd.DataFrame | None = None, fast: bool = False, seed: int = 42, save: bool = True,
+                             verbose: bool = False) -> dict:
+    """Tune, fit, calibrate and evaluate the scenario surrogate. Returns the bundle (metrics under "metrics")."""
+    from core.features import SCENARIO_FEATURES
+
+    if df is None:
+        from core.synth.build import load_dataset
+
+        df = load_dataset(fast)
+        if df is None:
+            raise FileNotFoundError("no synthetic dataset: run python -m core.synth.build" + (" --fast" if fast else ""))
+    mode = "fast" if fast else "full"
+    rng = np.random.default_rng(seed)
+    part = {k: df[df["split"] == k].reset_index(drop=True) for k in ("train", "val", "calib", "test")}
+    X = {k: v[SCENARIO_FEATURES].astype(float) for k, v in part.items()}
+    n_est = 400 if fast else 2000
+    models, quantile, qhat, report = {}, {}, {}, {}
+    draws = [{k: v[int(rng.integers(len(v)))] for k, v in PARAM_SPACE.items()} for _ in range(N_ITER[mode])]
+    for target in SCENARIO_TARGETS:
+        label, unit, worse_high, (lo_v, hi_v) = TARGET_INFO[target]
+        y = {k: v[target].to_numpy(dtype=float) for k, v in part.items()}
+        best = None
+        for params in draws:
+            m = _xgb(params, target, n_est, seed)
+            m.fit(X["train"], y["train"], eval_set=[(X["val"], y["val"])], verbose=False)
+            mae = float(np.mean(np.abs(np.clip(m.predict(X["val"]), lo_v, hi_v) - y["val"])))
+            if best is None or mae < best[0]:
+                best = (mae, params, m)
+        val_mae, params, model = best
+        qm = _xgb(params, target, n_est, seed, quantile=True)
+        qm.fit(X["train"], y["train"], eval_set=[(X["val"], y["val"])], verbose=False)
+        qc = qm.predict(X["calib"])
+        scores = np.maximum(qc[:, 0] - y["calib"], y["calib"] - qc[:, 2])
+        n = len(scores)
+        level = min(1.0, np.ceil((n + 1) * INTERVAL) / n)
+        q = float(np.quantile(scores, level, method="higher"))
+        pred = np.clip(model.predict(X["test"]), lo_v, hi_v)
+        qt = qm.predict(X["test"])
+        lo = np.minimum(np.clip(qt[:, 0] - q, lo_v, hi_v), pred)
+        hi = np.maximum(np.clip(qt[:, 2] + q, lo_v, hi_v), pred)
+        # baselines (fitted on train only)
+        mean_pred = np.full_like(y["test"], y["train"].mean())
+        h_train, h_test = centrality_heuristic(X["train"]), centrality_heuristic(X["test"])
+        b, a = np.polyfit(h_train, y["train"], 1) if np.std(h_train) > 0 else (0.0, y["train"].mean())
+        heur_pred = np.clip(a + b * h_test, lo_v, hi_v)
+        resid = pred - y["test"]
+        test = part["test"]
+
+        def breakdown(col: str) -> dict:
+            return {str(g): {"mae": round(float(np.mean(np.abs(resid[idx]))), 4),
+                             "mae_mean_baseline": round(float(np.mean(np.abs(mean_pred[idx] - y["test"][idx]))), 4),
+                             "n": int(len(idx))}
+                    for g, idx in test.groupby(col).indices.items()}
+
+        gain = model.get_booster().get_score(importance_type="gain")
+        tot = sum(gain.values()) or 1.0
+        report[target] = {
+            "label": label, "unit": unit, "best_params": params, "best_iteration": int(model.best_iteration),
+            "val_mae": round(val_mae, 4),
+            "model": {**_metrics(test, y["test"], pred, worse_high),
+                      "interval_coverage": round(float(np.mean((y["test"] >= lo) & (y["test"] <= hi))), 4),
+                      "interval_width": round(float(np.mean(hi - lo)), 4)},
+            "baseline_mean": _metrics(test, y["test"], mean_pred, worse_high),
+            "baseline_centrality": _metrics(test, y["test"], heur_pred, worse_high),
+            "residuals": {"mean": round(float(resid.mean()), 4), "std": round(float(resid.std()), 4),
+                          **{f"p{p}": round(float(np.percentile(resid, p)), 4) for p in (5, 50, 95)}},
+            "by_archetype": breakdown("archetype"), "by_disruption": breakdown("disruption"),
+            "top_features": sorted(({"feature": f, "importance": round(gain.get(f, 0.0) / tot, 4)} for f in SCENARIO_FEATURES),
+                                   key=lambda r: -r["importance"])[:10],
+            "monotone": MONOTONE[target],
+        }
+        models[target], quantile[target], qhat[target] = model, qm, q
+        if verbose:
+            r = report[target]
+            print(f"{target:14s} MAE {r['model']['mae']:.3f} (mean {r['baseline_mean']['mae']:.3f}, centrality "
+                  f"{r['baseline_centrality']['mae']:.3f})  R2 {r['model']['r2']:.3f}  rho {r['model']['spearman']:.3f}  "
+                  f"top10 {r['model']['top10_recall']:.2f}  cov {r['model']['interval_coverage']:.2f}")
+    bundle = {"version": SCENARIO_MODEL_VERSION, "features": SCENARIO_FEATURES, "targets": SCENARIO_TARGETS,
+              "models": models, "quantile": quantile, "qhat": qhat, "mode": mode}
+    # inference time (model only): a 2,000-scenario batch and single scenarios, vs the exact simulator per case
+    Xb = pd.concat([X["test"]] * (2000 // max(1, len(X["test"])) + 1)).iloc[:2000]
+    t = time.perf_counter()
+    _predict_frame(bundle, Xb)
+    batch_ms = (time.perf_counter() - t) * 1000 / len(Xb)
+    t = time.perf_counter()
+    for i in range(20):
+        _predict_frame(bundle, X["test"].iloc[[i % len(X["test"])]])
+    single_ms = (time.perf_counter() - t) * 1000 / 20
+    sim_ms = float(df["sim_ms"].mean())
+    feat_ms = 0.25  # core.features.scenario_features per scenario (measured; the network context is computed once)
+    bundle["metrics"] = {
+        "version": SCENARIO_MODEL_VERSION, "mode": mode, "artifact": scenario_model_path().name,
+        "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "dataset": {"rows": int(len(df)), "networks": int(df["network_id"].nunique()),
+                    **{f"{k}_networks": int(v["network_id"].nunique()) for k, v in part.items()},
+                    **{f"{k}_rows": int(len(v)) for k, v in part.items()}},
+        "targets": report,
+        "interval": {"level": INTERVAL, "method": "conformalized quantile regression (XGBoost P10/P90 + calibration networks)",
+                     "qhat": {t: round(v, 4) for t, v in qhat.items()}},
+        "timing": {"inference_ms_per_scenario_batch": round(batch_ms, 4), "inference_ms_single": round(single_ms, 3),
+                   "features_ms_per_scenario": feat_ms, "exact_sim_ms_per_scenario": round(sim_ms, 2),
+                   "speedup_batch": round(sim_ms / (batch_ms + feat_ms), 1)},
+        "note": "Labels come from the AEGIS simulator, so this is a fast surrogate validated on held-out synthetic "
+                "networks, not on real-world outcomes.",
+    }
+    if save:
+        import joblib
+
+        MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(bundle, scenario_model_path())
+        METRICS_PATH.write_text(json.dumps(bundle["metrics"], indent=1), encoding="utf-8")
+    return bundle
+
+
+def _booster(model):
+    return model.get_booster()
+
+
+def _best(model) -> tuple[int, int]:
+    """Trees up to the early-stopping best iteration (what XGBRegressor.predict uses)."""
+    return (0, int(model.best_iteration) + 1)
+
+
+def _predict_frame(bundle: dict, X: pd.DataFrame) -> dict[str, np.ndarray]:
+    """{target: array (n, 3) of [low, point, high]} for a feature frame."""
+    out = {}
+    A = np.ascontiguousarray(X[bundle["features"]].to_numpy(dtype=np.float32))
+    for t in bundle["targets"]:
+        lo_v, hi_v = TARGET_INFO[t][3]
+        # booster.inplace_predict skips the sklearn wrapper's DMatrix build (~10 ms per call on one row)
+        point = np.clip(_booster(bundle["models"][t]).inplace_predict(A, iteration_range=_best(bundle["models"][t])), lo_v, hi_v)
+        q = np.asarray(_booster(bundle["quantile"][t]).inplace_predict(A, iteration_range=_best(bundle["quantile"][t]))).reshape(len(A), -1)
+        lo = np.minimum(np.clip(q[:, 0] - bundle["qhat"][t], lo_v, hi_v), point)
+        hi = np.maximum(np.clip(q[:, 2] + bundle["qhat"][t], lo_v, hi_v), point)
+        out[t] = np.stack([lo, point, hi], axis=1)
+    return out
+
+
+def load_scenario_model(auto_train: bool = True) -> dict | None:
+    """The current scenario surrogate bundle (memoised). Missing -> train a fast one (if allowed); failure -> None."""
+    global _scenario_bundle, _scenario_error
+    with _scenario_lock:
+        if _scenario_bundle is not None:
+            return _scenario_bundle
+        path = scenario_model_path()
+        try:
+            import joblib
+
+            from core.features import SCENARIO_FEATURES
+
+            if path.exists():
+                cand = joblib.load(path)
+                if cand.get("version") == SCENARIO_MODEL_VERSION and cand.get("features") == SCENARIO_FEATURES:
+                    _scenario_bundle = cand
+                    return cand
+            if not auto_train:
+                _scenario_error = f"no current scenario model at models/{path.name}"
+                return None
+            from core.synth.build import build, load_dataset
+
+            df = load_dataset(fast=True)
+            if df is None:
+                df = build(42, 20, seed=42, fast=True, verbose=False)
+            _scenario_bundle = train_scenario_surrogate(df, fast=True)
+            return _scenario_bundle
+        except Exception as exc:  # the surrogate is optional: callers fall back to the exact engine
+            _scenario_error = f"{type(exc).__name__}: {exc}"
+            return None
+
+
+def scenario_model_status() -> dict:
+    b = load_scenario_model(auto_train=False)
+    return {"available": b is not None, "version": SCENARIO_MODEL_VERSION, "mode": (b or {}).get("mode"),
+            "error": None if b is not None else _scenario_error}
+
+
+def scenario_metrics() -> dict | None:
+    """models/metrics.json (written at training time), or None."""
+    if METRICS_PATH.exists():
+        try:
+            return json.loads(METRICS_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+    b = load_scenario_model(auto_train=False)
+    return b["metrics"] if b else None
+
+
+def predict_scenarios(G: nx.DiGraph, scenarios: list, dtypes: list | None = None, horizon: int = HORIZON) -> list[dict] | None:
+    """Surrogate predictions for several event lists on one network: [{target: {low, point, high}}]. None if no model."""
+    from core.features import context, feature_frame, scenario_features
+
+    bundle = load_scenario_model()
+    if bundle is None or not scenarios:
+        return None
+    ctx = context(G)
+    dtypes = dtypes or [None] * len(scenarios)
+    X = feature_frame([scenario_features(ctx, ev, dtypes[i], horizon) for i, ev in enumerate(scenarios)])
+    pred = _predict_frame(bundle, X)
+    return [{t: {"low": round(float(pred[t][i, 0]), 3), "point": round(float(pred[t][i, 1]), 3),
+                 "high": round(float(pred[t][i, 2]), 3)} for t in bundle["targets"]} for i in range(len(X))]
+
+
+FEATURE_TEXT = {  # feature -> (plain-English name, formatter)
+    "capacity_lost_share": ("capacity knocked out", lambda v: f"{v:.0%} of daily flow"),
+    "loss_max": ("worst single-target loss", lambda v: f"{v:.0%} of demand"),
+    "loss_sum": ("combined target loss", lambda v: f"{v:.0%} of demand"),
+    "severity_max": ("severity", lambda v: f"{v:.0%}"),
+    "severity_mean": ("average severity", lambda v: f"{v:.0%}"),
+    "duration": ("duration", lambda v: f"{v:.0f} days"),
+    "start": ("start day", lambda v: f"day {v:.0f}"),
+    "start_frac": ("timing in the horizon", lambda v: f"{v:.0%} in"),
+    "downstream_cover_min": ("stock cover downstream", lambda v: f"{v:.1f} days"),
+    "cover_minus_duration": ("stock cover minus outage length", lambda v: f"{v:+.1f} days"),
+    "cover_over_duration": ("stock cover / outage length", lambda v: f"{v:.2f}x"),
+    "alt_paths_min": ("alternate paths around the target", lambda v: f"{v:.0f}"),
+    "extra_lead_alt_max": ("extra lead time on the best detour", lambda v: f"{v:.1f} days"),
+    "articulation_any": ("single point of failure hit", lambda v: "yes" if v >= 0.5 else "no"),
+    "downstream_demand_max": ("demand downstream of the target", lambda v: f"{v:.0%}"),
+    "target_util_max": ("target utilisation", lambda v: f"{v:.0%}"),
+    "target_headroom_min": ("spare capacity at the target", lambda v: f"{v:.0%} of demand"),
+    "demand_up_share": ("demand surge", lambda v: f"+{v:.0%} of total demand"),
+    "demand_down_share": ("demand drop", lambda v: f"-{v:.0%} of total demand"),
+    "lead_mult_max": ("lead-time multiplier", lambda v: f"x{v:.1f}"),
+    "lead_inflation_share": ("flow-weighted lead-time inflation", lambda v: f"{v:.2f}"),
+    "supplier_hhi": ("supplier concentration (HHI)", lambda v: f"{v:.2f}"),
+    "backup_share": ("backup capacity", lambda v: f"{v:.0%} of demand"),
+    "mean_util": ("network utilisation", lambda v: f"{v:.0%}"),
+    "mean_cover_days": ("average stock cover", lambda v: f"{v:.1f} days"),
+    "min_cover_vs_lead": ("thinnest cover vs lead time", lambda v: f"{v:.2f}x"),
+    "betweenness_max": ("target betweenness", lambda v: f"{v:.2f}"),
+    "pagerank_max": ("target PageRank", lambda v: f"{v:.3f}"),
+    "regional_correlation": ("regional correlation", lambda v: f"{v:.0%}"),
+    "n_events": ("number of events", lambda v: f"{v:.0f}"),
+    "mean_lead": ("average lane lead time", lambda v: f"{v:.1f} days"),
+}
+
+
+def _feature_phrase(f: str, v: float) -> tuple[str, str]:
+    if f in FEATURE_TEXT:
+        name, fmt = FEATURE_TEXT[f]
+        return name, fmt(v)
+    if f.startswith("dt_"):
+        return f"disruption type {f[3:].replace('_', ' ')}", "yes" if v >= 0.5 else "no"
+    if f.startswith("ind_"):
+        return f"industry {f[4:]}", "yes" if v >= 0.5 else "no"
+    return f.replace("_", " "), f"{v:.3g}"
+
+
+def explain_scenario(G: nx.DiGraph, events: list, target: str = "unmet_pct", top_k: int = 4, dtype: str | None = None) -> list[str]:
+    """Plain-English SHAP explanation of the surrogate's prediction for one scenario (empty if no model)."""
+    import shap
+
+    from core.features import context, feature_frame, scenario_features
+
+    bundle = load_scenario_model()
+    if bundle is None:
+        return []
+    X = feature_frame([scenario_features(context(G), events, dtype)])
+    values = shap.TreeExplainer(bundle["models"][target]).shap_values(X)[0]
+    label, unit, _, _ = TARGET_INFO[target]
+    unit_s = "percentage points" if target == "unmet_pct" else unit
+    out = []
+    for j in np.argsort(-np.abs(values))[:top_k]:
+        if abs(values[j]) < 1e-3:
+            continue
+        name, val = _feature_phrase(X.columns[j], float(X.iloc[0, j]))
+        verb = "raises" if values[j] > 0 else "lowers"
+        out.append(f"{name[0].upper() + name[1:]} ({val}) {verb} the predicted {label} by {abs(values[j]):.2f} {unit_s}.")
+    return out
+
+
 if __name__ == "__main__":
+    import sys
+
+    if "--scenario" in sys.argv:
+        t0 = time.perf_counter()
+        b = train_scenario_surrogate(fast="--fast" in sys.argv, verbose=True)
+        print(f"trained in {time.perf_counter() - t0:.0f}s -> {scenario_model_path()} and {METRICS_PATH}")
+        print(json.dumps(b["metrics"]["timing"]))
+        raise SystemExit(0)
     t0 = time.perf_counter()
     b = train_surrogate()
     print(f"trained in {time.perf_counter() - t0:.1f}s -> {MODEL_PATH}")

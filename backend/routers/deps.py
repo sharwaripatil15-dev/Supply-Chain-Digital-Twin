@@ -29,6 +29,12 @@ def preset_graph() -> nx.DiGraph:
     return mock_demo_graph() if settings.mock_network else demo_graph()
 
 
+def display_graph() -> nx.DiGraph:
+    """The network the UI shows: the preset exactly as GET /network serves it, else the active CSV/manual network.
+    New engine features (what-if, analysis, prescreen) always run on the real engine against this graph."""
+    return preset_graph() if store.source == "preset" else get_graph()
+
+
 def get_graph() -> nx.DiGraph:
     """Graph used by core/ (live) routers: the active network (manual builder or activated CSV), else the demo."""
     G = store.graph()
